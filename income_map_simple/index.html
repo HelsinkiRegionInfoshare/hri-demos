@@ -13,10 +13,10 @@ We use Coffee script as the programming language, jQuery for handling
 the Ajax requests and px.js for reading the PC-Axis data, which
 requires underscore.js.
 -->
-<script type="text/javascript" src="coffee-script.js"></script>
-<script type="text/javascript" src="jquery-1.11.0.js"></script>
-<script type="text/javascript" src="underscore.js"></script>
-<script type="text/javascript" src="px.js"></script>
+<script type="text/javascript" src="../vendor/coffee-script.js"></script>
+<script type="text/javascript" src="../vendor/jquery-1.11.0.js"></script>
+<script type="text/javascript" src="../vendor/underscore.js"></script>
+<script type="text/javascript" src="../vendor/px.js"></script>
 
 <!--
 The following block fetches the datasets and combines them. The
@@ -25,9 +25,12 @@ visualization is done in a separate block below.
 <script type="text/coffeescript">
 # Set up some configuration
 # URL of the PC-Axis dataset
-# TODO: Set up a CORS proxy
-#STATISTICS_DATA_URL = "http://www.aluesarjat.fi/graph/Download.aspx?ssid=1402051202278&file=../DATABASE/ALUESARJAT_KAUPUNKIVERKKO/TULOTASO/VAESTON*;TULOT/A01HKIS_Vaestotulot.px"
-STATISTICS_DATA_URL = "A01HKIS_Vaestotulot.px"
+# A CORS-enabling proxy to the PC-Axis file
+STATISTICS_DATA_URL = "http://dev.hel.fi/stats/resources/www.aluesarjat.fi_a01hkis_vaestotulot/px"
+# Works also with a local file, if eg. the proxy server
+# is down.
+#STATISTICS_DATA_URL = "A01HKIS_Vaestotulot.px"
+
 # Base url of the geoserver for fetching the area polygons
 GEOSERVER_BASE_URL = "http://geoserver.hel.fi/geoserver/"
 
@@ -78,6 +81,7 @@ process_data = (statistics_response, polygons_response) ->
     # the proper columns and values later on.
     console.log("Statistics column names: ", statistics_px.variables())
     console.log("Statistics income classes: ", statistics_px.values('Tuloluokka'))
+    console.log("Years available: ", statistics_px.values('Vuosi'))
 
     # The px.js API allows for faster and more complex handling of the data,
     # but in this example it's just used to convert the table to a list of
@@ -158,9 +162,9 @@ official map and its map projection.
 -->
 <link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.2/leaflet.css" />
 <script src="http://cdn.leafletjs.com/leaflet-0.7.2/leaflet.js"></script>
-<script src="proj4.js"></script>
-<script src="proj4leaflet.js"></script>
-<script src="leaflet-dvf.js"></script>
+<script src="../vendor/proj4.js"></script>
+<script src="../vendor/proj4leaflet.js"></script>
+<script src="../vendor/leaflet-dvf.js"></script>
 <script type="text/coffeescript" src="hel_map.coffee"></script>
 
 <script type="text/coffeescript">
@@ -209,7 +213,6 @@ setup_map_visualization = (polygons) ->
     min_value = all_values[0]
     max_value = all_values[Math.round(all_values.length*0.95)] # High 5%
 
-    console.log min_value, max_value
     # Creates a green (richest) to red (poorest) colormap
     value_to_color = new L.HSLHueFunction(
             new L.Point(min_value,0),
