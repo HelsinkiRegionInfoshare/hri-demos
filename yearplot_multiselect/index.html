@@ -1,0 +1,176 @@
+<!--
+An example and demo for fetching and plotting data from the statistics API.
+A slightly more complex data handling by allowing multiple class selections.
+-->
+
+<link href="../vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+
+<!-- Elements that will get populated later on -->
+<h1 id="dataset_title"></h1>
+<table class="table" id="variable_selectors">
+<thead><tr></tr></thead>
+<tbody><tr></tr></tbody>
+</table>
+<div id="lineplot" style="height: 500px"></div>
+
+<!-- Include some handy libraries -->
+<script type="text/javascript" src="../vendor/coffee-script.js"></script>
+<script type="text/javascript" src="../vendor/jquery-1.11.0.js"></script>
+<script type="text/javascript" src="../vendor/underscore.js"></script>
+<script type="text/javascript" src="../vendor/bootstrap/js/bootstrap.js"></script>
+<script type="text/javascript" src="../vendor/bootstrap-multiselect.js"></script>
+<script type="text/javascript" src="../vendor/jquery.flot.js"></script>
+
+<!-- Include the Statproxy class -->
+<script type="text/coffeescript" src="http://dev.hel.fi/stats/browser/statproxy.coffee"></script>
+<script type="text/coffeescript">
+# URL to the JSON-"entrypoint" of the statistic.
+# Any resource with a 'vuosi' field could be used here
+STAT_RESOURCE="http://dev.hel.fi/stats/resources/aluesarjat_a01hki_asuntokuntien_tulot/"
+# Specify columns we use on the axis
+AXES = ['vuosi', 'value']
+
+# Get a "proxy object" to the resource
+stats = new Statproxy STAT_RESOURCE
+
+# Get the "specification" of the data. Includes
+# metadata such as the title and dimensions/categories
+# in the dataset.
+spec_promise = stats.specification()
+
+class DataController
+	constructor: (@plotel, @stats, @specification, @axes) ->
+		@selection = {}
+		@refresh_data()
+
+	set_selection: (dimension, category, enabled) =>
+		if dimension not of @selection
+			@selection[dimension] = {}
+		
+		if not enabled
+			delete @selection[dimension][category]
+		else
+			@selection[dimension][category] = enabled
+		
+		@refresh_data()
+	
+	_has_full_selection: =>
+		console.log @selection
+		for dim in @specification.dimensions
+			dim_id = dim.id
+			if dim_id in @axes
+				continue
+
+			if dim_id not of @selection
+				return false
+			if _.isEmpty @selection[dim_id]
+				return false
+		return true
+
+	refresh_data: =>
+		# Ensure we have at least one selection for
+		# each dimension
+		if not @_has_full_selection()
+			$(@plotel).html """
+			<h2 class="ploterror">Please select at least one category for each dimension</h2>
+			"""
+			return
+		# First filter for the selected categories
+		substats = @stats.filter @selection
+
+		# The plot needs to know the selection of the data.
+		# This may change as the fetching/drawing is still in progress,
+		# so we'll have to deep-copy it.
+		selection_clone = JSON.parse JSON.stringify @selection
+
+		# As we allow multiple categories to be selected
+		# simultaneously, any category combination will
+		# get its own line, so they need to be "grouped".
+		# The server (and the proxy)
+		# has a "group_columns" method for this.
+		# Get the needed data and pass it to the plotter
+		substats.group_columns(@axes, category_labels: true).done (data) =>
+			@refresh_plot selection_clone, data
+
+
+	refresh_plot: (selection, data) =>
+		datasets = []
+		# Add labels only for datasets that need them
+		needs_labels = []
+		for dim_id, categories of selection
+			console.log dim_id, categories
+			if _.size(categories) > 1
+				needs_labels.push dim_id
+		console.log needs_labels
+		for group in data
+			# Convert to numbers
+			x = group[@axes[0]].map parseFloat
+			y = group[@axes[1]].map parseFloat
+			
+			# Convert the data to "row-format"
+			xy = _.zip x, y
+	
+			label = []
+			for k in needs_labels
+				console.log k
+				console.log group[k]
+				label.push group[k]
+			datasets.push
+				data: xy
+				label: label.join ' '
+		
+		# And plot it
+		$.plot "#lineplot", datasets,
+			series:
+				lines: show: true
+				points: show: true
+
+
+# Set up the selection UI when we get the
+# specification
+spec_promise.done (spec) ->
+	controller = new DataController "#lineplot", stats, spec, AXES
+	# Set the title
+	$("#dataset_title").html spec.metadata.label
+
+	# Get "free" dimensions, eg on which we have
+	# to select something
+	free_dims = (dim for dim in spec.dimensions \
+		when dim.id not in AXES)
+	
+	# Helper function to get a label of a
+	# dimension/category if it exists
+	get_label = (obj) ->
+		if 'label' of obj
+			return obj.label
+		return obj.id
+
+	# Set up select boxes for the free variables
+	varsel_el = $ "#variable_selectors"
+	labels = varsel_el.find("thead tr")
+	selectors = varsel_el.find("tbody tr")
+	for dim in free_dims
+		labels.append $ "<th>#{get_label dim}</th>"
+		selrow = $("<td></td>").appendTo selectors
+		selector = $("""
+		<select name="#{dim.id}" multiple="multiple">
+		</select>
+		""").appendTo selrow
+
+		for cat in dim.categories
+			selector.append $ """
+			<option value="#{cat.id}">
+			#{get_label cat}
+			</option>
+			"""
+		selector.multiselect
+			enableCaseInsensitiveFiltering: true
+			# Update data/plot when selection changes
+			# The do-weirness to capture current dim
+			onChange: do (dim) -> (el, enabled) ->
+				controller.set_selection dim.id, el.val(), enabled
+	
+	# Plot the initial data
+	# refresh_data()
+
+</script>
