@@ -20,6 +20,7 @@ A slightly more complex data handling by allowing multiple class selections.
 <script type="text/javascript" src="../vendor/bootstrap/js/bootstrap.js"></script>
 <script type="text/javascript" src="../vendor/bootstrap-multiselect.js"></script>
 <script type="text/javascript" src="../vendor/jquery.flot.js"></script>
+<script type="text/javascript" src="../vendor/jquery-deparam.js"></script>
 
 <!-- Include the Statproxy class -->
 <script type="text/coffeescript" src="http://dev.hel.fi/stats/browser/statproxy.coffee"></script>
@@ -38,9 +39,14 @@ stats = new Statproxy STAT_RESOURCE
 # in the dataset.
 spec_promise = stats.specification()
 
+# The DataControlled class handles the fetching and plotting
+# of data once all the initialization hoops are done.
 class DataController
 	constructor: (@plotel, @stats, @specification, @axes) ->
-		@selection = {}
+		# Load the initial selection from the url-state.
+		# Allows "deep-linking" to different views. The
+		# get_url_state is defined in the bottom.
+		@selection = get_url_filtering()
 		@refresh_data()
 
 	set_selection: (dimension, category, enabled) =>
@@ -51,11 +57,14 @@ class DataController
 			delete @selection[dimension][category]
 		else
 			@selection[dimension][category] = enabled
-		
+
+		# Update the selection to the url
+		update_url_filtering @selection
 		@refresh_data()
 	
 	_has_full_selection: =>
-		console.log @selection
+		# Check if we have at least one selection for
+		# each dimension.
 		for dim in @specification.dimensions
 			dim_id = dim.id
 			if dim_id in @axes
@@ -69,7 +78,9 @@ class DataController
 
 	refresh_data: =>
 		# Ensure we have at least one selection for
-		# each dimension
+		# each dimension. Failing to do this will cause
+		# a massive dataset, as without filtering, the
+		# default is to return all results.
 		if not @_has_full_selection()
 			$(@plotel).html """
 			<h2 class="ploterror">Please select at least one category for each dimension</h2>
@@ -94,14 +105,18 @@ class DataController
 
 
 	refresh_plot: (selection, data) =>
-		datasets = []
-		# Add labels only for datasets that need them
+		# Check which dimensions are included in the label.
+		# Use only the dimensions that have more than one
+		# option selected.
 		needs_labels = []
 		for dim_id, categories of selection
 			console.log dim_id, categories
 			if _.size(categories) > 1
 				needs_labels.push dim_id
-		console.log needs_labels
+		
+		# Convert the data to a format that the plotting
+		# library flot understands.
+		datasets = []
 		for group in data
 			# Convert to numbers
 			x = group[@axes[0]].map parseFloat
@@ -109,17 +124,16 @@ class DataController
 			
 			# Convert the data to "row-format"
 			xy = _.zip x, y
-	
+			
+			# Generate this group's plot label
 			label = []
 			for k in needs_labels
-				console.log k
-				console.log group[k]
 				label.push group[k]
 			datasets.push
 				data: xy
 				label: label.join ' '
 		
-		# And plot it
+		# And finally plot the datasets using flot
 		$.plot "#lineplot", datasets,
 			series:
 				lines: show: true
@@ -165,12 +179,35 @@ spec_promise.done (spec) ->
 			"""
 		selector.multiselect
 			enableCaseInsensitiveFiltering: true
-			# Update data/plot when selection changes
+			# Inform the controller about the changed selection.
+			# The controller will then handle fetching and plotting
+			# the data.
 			# The do-weirness to capture current dim
 			onChange: do (dim) -> (el, enabled) ->
 				controller.set_selection dim.id, el.val(), enabled
+
+# A helper function to decode the "state"
+# from an url. Using the hash for IE-compatibility :(
+get_url_filtering = ->
+	hash = window.location.hash
+	state = $.deparam hash[1...]
+	# Parse from the URL format to the actually used
+	# format.
+	for dim, catstr of state
+		as_obj = {}
+		for category in catstr.split(',')
+			as_obj[category] = true
+		state[dim] = as_obj
+	return state
+
+update_url_filtering = (newopts) ->
+	state = {}
+	# Convert to a bit nicer list-format
+	for dim, categories of newopts
+		state[dim] = (cat for cat of categories).join(',')
 	
-	# Plot the initial data
-	# refresh_data()
+	current = get_url_filtering()
+	newstate = _.extend current, state
+	window.location.hash = $.param newstate
 
 </script>
