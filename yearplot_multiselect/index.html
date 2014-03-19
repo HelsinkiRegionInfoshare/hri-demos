@@ -110,7 +110,6 @@ class DataController
 		# option selected.
 		needs_labels = []
 		for dim_id, categories of selection
-			console.log dim_id, categories
 			if _.size(categories) > 1
 				needs_labels.push dim_id
 		
@@ -144,6 +143,7 @@ class DataController
 # specification
 spec_promise.done (spec) ->
 	controller = new DataController "#lineplot", stats, spec, AXES
+	current_selection = controller.selection
 	# Set the title
 	$("#dataset_title").html spec.metadata.label
 
@@ -172,11 +172,15 @@ spec_promise.done (spec) ->
 		""").appendTo selrow
 
 		for cat in dim.categories
-			selector.append $ """
+			optel = $("""
 			<option value="#{cat.id}">
 			#{get_label cat}
 			</option>
-			"""
+			""").appendTo selector
+			
+			if dim.id of current_selection and current_selection[dim.id][cat.id]
+				optel.attr "selected", "selected"
+
 		selector.multiselect
 			enableCaseInsensitiveFiltering: true
 			# Inform the controller about the changed selection.
