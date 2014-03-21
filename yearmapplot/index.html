@@ -1,0 +1,408 @@
+<!--
+An example and demo for fetching and plotting data from the statistics API.
+A slightly more complex data handling by allowing multiple class selections.
+-->
+
+<link href="../vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+
+<!-- Elements that will get populated later on -->
+<h1 id="dataset_title"></h1>
+<table class="table" id="variable_selectors">
+<thead><tr></tr></thead>
+<tbody><tr></tr></tbody>
+</table>
+
+<div class="container-fluid">
+	<div class="row">
+		<div id="map" class="col-sm-6" style="height: 500px"></div>
+		<div id="lineplot" class="col-sm-6" style="height: 500px"></div>
+	</div>
+</div>
+
+<!-- Include some handy libraries -->
+<script type="text/javascript" src="../vendor/coffee-script.js"></script>
+<script type="text/javascript" src="../vendor/jquery-1.11.0.js"></script>
+<script type="text/javascript" src="../vendor/underscore.js"></script>
+<script type="text/javascript" src="../vendor/bootstrap/js/bootstrap.js"></script>
+<script type="text/javascript" src="../vendor/bootstrap-multiselect.js"></script>
+<script type="text/javascript" src="../vendor/jquery.flot.js"></script>
+<script type="text/javascript" src="../vendor/jquery-deparam.js"></script>
+
+<!--
+Include libraries needed for the visualization. Most of the Leaflet map initialization
+is done in the separate hel_map.coffee file, which sets up the map to use Helsinki's
+official map and its map projection.
+-->
+<link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.2/leaflet.css" />
+<script src="http://cdn.leafletjs.com/leaflet-0.7.2/leaflet.js"></script>
+<script src="../vendor/proj4.js"></script>
+<script src="../vendor/proj4leaflet.js"></script>
+<script src="../vendor/leaflet-dvf.js"></script>
+<script type="text/coffeescript" src="hel_map.coffee"></script>
+
+<!-- Include the Statproxy class -->
+<script type="text/coffeescript" src="http://localhost:9001/browser/statproxy.coffee"></script>
+<script type="text/coffeescript">
+# URL to the JSON-"entrypoint" of the statistic.
+# Any resource with a 'vuosi' field could be used here
+STAT_RESOURCE="http://localhost:9001/resources/aluesarjat_a01hki_asuntokuntien_tulot/"
+GEOSERVER_BASE_URL = "http://geoserver.hel.fi/geoserver/"
+
+# Get a "proxy object" to the resource
+stats = new Statproxy STAT_RESOURCE
+
+# Get the "specification" of the data. Includes
+# metadata such as the title and dimensions/categories
+# in the dataset.
+spec_promise = stats.specification()
+
+# Fetch the area polygons in GeoJSON format using WFS
+wfs_url = GEOSERVER_BASE_URL + "wfs/"
+request_parameters = {
+    # Specify the dataset to use
+    typeName: 'hel:osaalue'
+    # Standard WFS request parameters
+    srsName: 'EPSG:4326'
+    service: 'WFS'
+    version: '1.1.0'
+    request: 'GetFeature'
+    outputFormat: 'application/json'
+    }
+polygons_promise = $.getJSON(wfs_url, request_parameters)
+
+class SelectionController
+	constructor: (@specification) ->
+		@selection = get_url_filtering()
+		@$ = $ @
+	
+	update_selection: (dimension, category, enabled) =>
+		if dimension not of @selection
+			@selection[dimension] = {}
+		
+		if not enabled
+			delete @selection[dimension][category]
+		else
+			@selection[dimension][category] = enabled
+
+		# Update the selection to the url
+		update_url_filtering @selection
+		@trigger_change()
+	
+	set_selection: (dimension, categories) =>
+		if not _.isArray categories
+			categories = [categories]
+		
+		@selection[dimension] = {}
+		for category in categories
+			@selection[dimension][category] = true
+		update_url_filtering @selection
+		@trigger_change()
+	
+	toggle: (dimension, category) =>
+		if dimension not of @selection
+			@selection[dimension] = {}
+		if category of @selection[dimension]
+			delete @selection[dimension][category]
+		else
+			delete @selection[dimension][category] = true
+		@trigger_change()
+			
+	
+	trigger_change: =>
+		@$.trigger 'selection_changed', [@selection, @has_full_selection]
+		
+	
+	has_full_selection: (axes) =>
+		# Check if we have at least one selection for
+		# each dimension.
+		for dim in @specification.dimensions
+			dim_id = dim.id
+			if dim_id in axes
+				continue
+
+			if dim_id not of @selection
+				return false
+			if _.isEmpty @selection[dim_id]
+				return false
+		return true
+	
+
+class PlotController
+	constructor: (@plotel, @stats, @specification, @axes) ->
+	
+	refresh_data: (selection, is_full) =>
+		# Ensure we have at least one selection for
+		# each dimension. Failing to do this will cause
+		# a massive dataset, as without filtering, the
+		# default is to return all results.
+		if not is_full @axes
+			$(@plotel).html """
+			<h2 class="ploterror">Please select at least one category for each dimension</h2>
+			"""
+			return
+
+		my_selection = _.omit selection, @axes...
+		# First filter for the selected categories
+		substats = @stats.filter my_selection
+
+		# The plot needs to know the selection of the data.
+		# This may change as the fetching/drawing is still in progress,
+		# so we'll have to deep-copy it.
+		selection_clone = JSON.parse JSON.stringify my_selection
+
+		# As we allow multiple categories to be selected
+		# simultaneously, any category combination will
+		# get its own line, so they need to be "grouped".
+		# The server (and the proxy)
+		# has a "group_columns" method for this.
+		# Get the needed data and pass it to the plotter
+		substats.group_columns(@axes, category_labels: true).done (data) =>
+			@refresh_plot selection_clone, data
+
+
+	refresh_plot: (selection, data) =>
+		# Check which dimensions are included in the label.
+		# Use only the dimensions that have more than one
+		# option selected.
+		needs_labels = []
+		for dim_id, categories of selection
+			if _.size(categories) > 1
+				needs_labels.push dim_id
+		
+		# Convert the data to a format that the plotting
+		# library flot understands.
+		datasets = []
+		for group in data
+			# Convert to numbers
+			x = group[@axes[0]].map parseFloat
+			y = group[@axes[1]].map parseFloat
+			
+			# Convert the data to "row-format"
+			xy = _.zip x, y
+			
+			# Generate this group's plot label
+			label = []
+			for k in needs_labels
+				label.push group[k]
+			datasets.push
+				data: xy
+				label: label.join ' '
+		
+		# And finally plot the datasets using flot
+		$.plot "#lineplot", datasets,
+			series:
+				lines: show: true
+				points: show: true
+
+class MapController
+	constructor: (@el, @polygons, @stats, @specification, @axes, @selection_control) ->
+		@map = hel_leaflet_map @el
+		@polygons_by_area = {}
+		for polygon in @polygons.features
+			# Convert the area_id to integer as the datasets
+			# differ in these IDs
+			# in whether they are zero-padded or not.
+			# TODO: This could be taken as an argument in the
+			#	constructor
+			area_id = parseInt(polygon.properties.tunnus)
+			polygon.properties.area_id = area_id
+			@polygons_by_area[area_id] = polygon
+
+		@layers_by_area = {}
+
+		@borders_layer = L.geoJson polygons,
+			onEachFeature: (feat, layer) =>
+				return if 'area_id' not of feat.properties
+				@layers_by_area[feat.properties.area_id] = layer
+
+				layer.on click: (e) =>
+					feat = e.target.feature
+					return if 'raw_area' not of feat.properties
+					raw_area = feat.properties.raw_area
+					@selection_control.toggle @axes[0], raw_area
+
+
+		@borders_layer.addTo @map.map
+	
+	refresh_data: (selection, is_full) =>
+		my_selection = _.omit selection, @axes...
+		substats = @stats.filter my_selection
+		selection_clone = JSON.parse JSON.stringify selection
+		substats.group_columns(@axes).done (data) =>
+			@refresh_plot selection_clone, data
+
+	refresh_plot: (selection, data) =>
+		enabled_polygons = []
+		data = data[0]
+		area_and_value = _.zip data[@axes[0]], data[@axes[1]]
+		for [area, value] in area_and_value
+			# Parse the "small-area-id" from the area string
+			# TODO: This could be taken as an argument in the
+			#	constructor
+			area_parts = area.split "_"
+			area_id = parseInt(area_parts[1])
+			continue if area_id not of @polygons_by_area
+			polygon = @polygons_by_area[area_id]
+			polygon.properties.stat_value = parseFloat value
+			polygon.properties.raw_area = area
+			enabled_polygons.push polygon
+		
+		# Calculate the range and colormap from it
+		all_values = (p.properties.stat_value for p in enabled_polygons \
+			when not isNaN p.properties.stat_value)
+		# Get rid of really extreme values
+
+		min_value = _.min all_values
+		max_value = _.max all_values
+		# Creates a green (highest) to red (lowest) colormap
+		value_to_color = new L.HSLHueFunction(
+			new L.Point(min_value,0),
+			new L.Point(max_value,120))
+
+		if @axes[0] of selection
+			area_selection = selection[@axes[0]]
+		else
+			area_selection = {}
+		
+		styler = (polygon) =>
+			# Get the value and force it in to the color mapping range
+			value = polygon.properties.stat_value
+			if value < min_value
+				value = min_value
+			if value > max_value
+				value = max_value
+			# Specify the styling and coloring by value
+			color = value_to_color.evaluate(value)
+			style =
+				color: "white"
+				fillColor: color
+				fillOpacity: 0.7
+				opacity: 1
+				dashArray: '3'
+				weight: 1
+
+			if not value
+				style.fillOpacity = 0.1
+			
+			if area_selection[polygon.properties.raw_area]
+				style.weight = 3
+				style.color = "black"
+				style.dashArray = ''
+				layer = @layers_by_area[polygon.properties.area_id]
+				layer.bringToFront()
+
+			return style
+		@borders_layer.setStyle styler
+
+
+# Set up the selection UI when we get the data
+$.when(spec_promise, polygons_promise).done (args...) ->
+	[spec, polygons] = (arg[0] for arg in args)
+	selection = new SelectionController spec
+	plot = new PlotController "#lineplot", stats, spec, ['vuosi', 'value']
+	map = new MapController "map", polygons, stats, spec, ['alue', 'value'], selection
+	
+	
+	# Set the title
+	$("#dataset_title").html spec.metadata.label
+
+	# Get "free" dimensions, eg on which we have
+	# to select something
+	free_dims = (dim for dim in spec.dimensions \
+		when dim.id != 'value')
+	
+	multiselect_dims = ['alue']
+	
+	# Helper function to get a label of a
+	# dimension/category if it exists
+	get_label = (obj) ->
+		if 'label' of obj
+			return obj.label
+		return obj.id
+
+	# Set up select boxes for the free variables
+	varsel_el = $ "#variable_selectors"
+	labels = varsel_el.find("thead tr")
+	selectors = varsel_el.find("tbody tr")
+	for dim in free_dims
+		labels.append $ "<th>#{get_label dim}</th>"
+		selrow = $("<td></td>").appendTo selectors
+		selector = $("""
+		<select name="#{dim.id}">
+		</select>
+		""").appendTo selrow
+		is_multiselect = dim.id in multiselect_dims
+	
+		# Synchronize the selection to the dropdowns
+		selection.$.on 'selection_changed', do (dim, selector) -> (ev, args...) ->
+			selector.find('option').removeAttr "selected"
+			if dim.id not of selection.selection
+				selector.multiselect "refresh"
+				return
+			for selected of selection.selection[dim.id]
+				selector.find("option[value=\"#{selected}\"]").attr "selected", "selected"
+			selector.multiselect "refresh"
+
+		# "Uniselect" selects first by default
+		if not is_multiselect and dim.id not of selection.selection
+			selection.set_selection dim.id, dim.categories[0].id
+
+		for cat in dim.categories
+			optel = $("""
+			<option value="#{cat.id}">
+			#{get_label cat}
+			</option>
+			""").appendTo selector
+			
+			#if dim.id of selection.selection and selection.selection[dim.id][cat.id]
+			#	optel.attr "selected", "selected"
+			
+		
+		if is_multiselect
+			selector.attr "multiple", "multiple"
+			onChange = do (dim) -> (el, enabled) ->
+				selection.update_selection dim.id, el.val(), enabled
+		else
+			onChange = do (dim) -> (el, enabled) ->
+				return if not enabled
+				selection.set_selection dim.id, el.val()
+		
+
+		selector.multiselect
+			enableCaseInsensitiveFiltering: true
+			onChange: onChange
+		
+	# Hook up the objects to the selection
+	selection.$.on 'selection_changed', (ev, args...) ->
+		plot.refresh_data args...
+		map.refresh_data args...
+	
+	# And force initial change
+	selection.trigger_change()
+
+
+# A helper function to decode the "state"
+# from an url. Using the hash for IE-compatibility :(
+get_url_filtering = ->
+	hash = window.location.hash
+	state = $.deparam hash[1...]
+	# Parse from the URL format to the actually used
+	# format.
+	for dim, catstr of state
+		as_obj = {}
+		for category in catstr.split(',')
+			as_obj[category] = true
+		state[dim] = as_obj
+	return state
+
+update_url_filtering = (newopts) ->
+	state = {}
+	# Convert to a bit nicer list-format
+	for dim, categories of newopts
+		state[dim] = (cat for cat of categories).join(',')
+	
+	current = get_url_filtering()
+	newstate = _.extend current, state
+	window.location.hash = $.param newstate
+
+</script>
