@@ -32,7 +32,7 @@ GEOSERVER_BASE_URL = "http://geoserver.hel.fi/geoserver/"
 
 # Year of the dataset time series to show
 STATISTICS_YEAR = 2011
-# The value of interest in the dataset (mean income)
+# The value of interest in the dataset (mean income).
 STATISTICS_INCOME_CLASS = '01'
 
 # Set up a proxy object for the statistics dataset
@@ -209,7 +209,6 @@ setup_map_visualization = (polygons) ->
 
         style: (polygon) ->
             # Get the value and force it in to the color mapping range
-            console.log polygon.properties
             value = polygon.properties.statistics.value
             if value < min_value
                 value = min_value
