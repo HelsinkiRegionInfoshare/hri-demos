@@ -1,22 +1,22 @@
 <!--
-An example of combining aluesarja.fi's PC-Axis data with city area polygons
+An example of combining Helsinki region's statistical data with city area polygons
 from geoserver.hel.fi. Combines these to visualize average wages of city areas
 on map.
-
-Note that the code at times emphasises (quite heavily) readability on expense
-of performance and architecture.
 -->
 
 <!--
 Include libraries for fetching and combining the datasets.
 We use Coffee script as the programming language, jQuery for handling
-the Ajax requests and px.js for reading the PC-Axis data, which
-requires underscore.js.
+the Ajax requests and underscore.js for all sorts of handy stuff.
 -->
 <script type="text/javascript" src="../vendor/coffee-script.js"></script>
 <script type="text/javascript" src="../vendor/jquery-1.11.0.js"></script>
 <script type="text/javascript" src="../vendor/underscore.js"></script>
-<script type="text/javascript" src="../vendor/px.js"></script>
+<!--
+Include the Statproxy-class to fetch the statistical data from
+the statistics API
+-->
+<script type="text/coffeescript" src="http://dev.hel.fi/stats/browser/statproxy.coffee"></script>
 
 <!--
 The following block fetches the datasets and combines them. The
@@ -24,18 +24,31 @@ visualization is done in a separate block below.
 -->
 <script type="text/coffeescript">
 # Set up some configuration
-# URL of the PC-Axis dataset
-# A CORS-enabling proxy to the PC-Axis file
-STATISTICS_DATA_URL = "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestotulot/pc_axis"
-# Works also with a local file, if eg. the proxy server
-# is down.
-#STATISTICS_DATA_URL = "A01HKIS_Vaestotulot.px"
+# URL of the dataset in the API
+STATISTICS_DATA_URL = "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestotulot/"
 
 # Base url of the geoserver for fetching the area polygons
 GEOSERVER_BASE_URL = "http://geoserver.hel.fi/geoserver/"
 
-# Fetch the statistics in PC-Axis format
-statistics_promise = $.get(STATISTICS_DATA_URL)
+# Year of the dataset time series to show
+STATISTICS_YEAR = 2011
+# The value of interest in the dataset (mean income)
+STATISTICS_INCOME_CLASS = '01'
+
+# Set up a proxy object for the statistics dataset
+statistics_dataset = new Statproxy(STATISTICS_DATA_URL)
+# Get a filtered dataset of only the entries we want.
+# This is again just a proxy object with no data in itself.
+filtering = {
+    vuosi: STATISTICS_YEAR,
+    tuloluokka: STATISTICS_INCOME_CLASS
+    }
+statistics = statistics_dataset.filter(filtering)
+
+# Fetch the statistics data as "entries", ie a dictionary
+# of the columns for each area. Returns a promise object
+# that will get the data later on.
+statistics_entries_promise = statistics.entries()
 
 # Fetch the area polygons in GeoJSON format using WFS
 wfs_url = GEOSERVER_BASE_URL + "wfs/"
@@ -58,9 +71,11 @@ polygons_promise = $.getJSON(wfs_url, request_parameters)
 @data_processed_promise = $.Deferred()
 # Function for processing the processing the data after the requests are done.
 # This is used as a callback for the data requests below.
-process_data = (statistics_response, polygons_response) ->
+process_data = (
+        statistics_entries_response,
+        polygons_response) ->
     # The returned data is the first parameter of the responses
-    statistics_data = statistics_response[0]
+    statistics_entries = statistics_entries_response[0]
     polygons = polygons_response[0]
 
     # Create a mapping of area ID's to the polygons. This will be needed to
@@ -71,57 +86,42 @@ process_data = (statistics_response, polygons_response) ->
         # in whether they are zero-padded or not.
         area_id = parseInt(polygon.properties.tunnus)
         polygons_by_area[area_id] = polygon
-        # Add array for storing the statistics later on
-        polygon.properties.statistics = []
-        
 
-    # Use the px.js library for opening the PC-Axis data.
-    statistics_px = new Px(statistics_data)
-    # Dump some information of the dataset. This can be used to pick
-    # the proper columns and values later on.
-    console.log("Statistics column names: ", statistics_px.variables())
-    console.log("Statistics income classes: ", statistics_px.values('Tuloluokka'))
-    console.log("Years available: ", statistics_px.values('Vuosi'))
-
-    # The px.js API allows for faster and more complex handling of the data,
-    # but in this example it's just used to convert the table to a list of
-    # rows.
-    statistics = statistics_px.entries()
-    
     # Go through the rows and insert their data in to the matching polygon features.
     # Whether inserting these to the GeoJSON data structure is the best approach
     # depends on the use case, but it enables quite easy map visualization in this
     # example later on.
-    for row in statistics
-        # The area codes are found embedded in the area name
-        # strings in format "<City code> <Area code> <Area name>",
-        # so some string processing is needed to extract them. The
-        # different hierarchies of the area coding are mixed, but
-        # the codes are unique, so this suffices. The data includes also
-        # entry for the whole city, which doesn't have the Area code field.
-        area_parts = row.Alue.split(" ")
+    for row in statistics_entries
+        # The area codes are in format AAABDDDEEE, where the the zero-padded
+        # numeric codes are:
+        #     AAA: municipality (kunta) code
+        #     B: "large area" (suurarue/suurpiiri) code
+        #     DDD: statistics area (tilastoalue) code
+        #     EEE: "small area" (pienalue) code (also known as "osa-alue")
+        # 
+        # We use the small-area-code:
+        small_area = row.alue[row.alue.length-3...]
         # The statistics data has zero-padded IDs whereas the WFS data doesn't,
         # so convert to an integer here for compatibility later on.
-        area_id = parseInt(area_parts[1])
+        area_id = parseInt(small_area)
         
-        # px.js returns all entries as strings, so some of these are converted
-        # to suitable datatypes.
-        row.Vuosi = parseInt(row.Vuosi)
-        # The value of the row's statistic ends up in the 'num' column, but
-        # is put in to a new attribute to maintain the original values.
-        row.value = parseFloat(row.num)
+        # The value of the row's statistic ends up in the 'value' column, which
+        # is a float but presented as string, so parse it to a number.
+        row.value = parseFloat(row.value)
 
         # Link the data row to the polygon if a matching one is found.
         if area_id not of polygons_by_area
             continue
         polygon = polygons_by_area[area_id]
-        polygon.properties.statistics.push row
+        polygon.properties.statistics = row
     
     # Notify that we're done with processing the data
     data_processed_promise.resolve(polygons)
     
 # Call the process_data callback after we get the response.
-requests_promise = $.when(statistics_promise, polygons_promise)
+requests_promise = $.when(
+    statistics_entries_promise,
+    polygons_promise)
 requests_promise.done(process_data)
 # Very rudimentary error handling.
 requests_promise.fail( ->
@@ -168,35 +168,15 @@ official map and its map projection.
 <script type="text/coffeescript" src="hel_map.coffee"></script>
 
 <script type="text/coffeescript">
-# Year of the dataset time series to show
-STATISTICS_YEAR = 2011
-# The value of interest in the dataset (mean income)
-STATISTICS_INCOME_CLASS = 'Keskitulo'
-
 # The visualization is configured in this function, which is used as a callback
 # below for when the data processing is done.
 setup_map_visualization = (polygons) ->
-    
-    # Find the rows that we want to show and store them in the area's properties
-    # so they will be found quickly later on.
-    for polygon in polygons.features
-        # Skip polygons with no associated statistics
-        if not polygon.properties.statistics
-            continue
-        for row in polygon.properties.statistics
-            # Pick the statistic row of the year and income class
-            # specified above.
-            if row.Vuosi != STATISTICS_YEAR
-                continue
-            if row.Tuloluokka != STATISTICS_INCOME_CLASS
-                continue
-            polygon.properties.statistics_row = row
     
     # Get all values of our statistic of interest to calculate
     # the range.
     all_values = []
     for polygon in polygons.features
-        row = polygon.properties.statistics_row
+        row = polygon.properties.statistics
         if not row
             continue
         value = row.value
@@ -225,11 +205,12 @@ setup_map_visualization = (polygons) ->
     borders_layer = L.geoJson polygons,
         # Skip the polygons that don't have the statistic of interest
         filter: (polygon) ->
-            return 'statistics_row' of polygon.properties
+            return 'statistics' of polygon.properties
 
         style: (polygon) ->
             # Get the value and force it in to the color mapping range
-            value = polygon.properties.statistics_row.value
+            console.log polygon.properties
+            value = polygon.properties.statistics.value
             if value < min_value
                 value = min_value
             if value > max_value
@@ -237,11 +218,12 @@ setup_map_visualization = (polygons) ->
         
             # Specify the styling and coloring by value
             color = value_to_color.evaluate(value)
-            style =
-                color: "black"
-                fillColor: color
-                fillOpacity: 0.8
+            style = {
+                color: "black",
+                fillColor: color,
+                fillOpacity: 0.8,
                 weight: 1
+                }
 
             if not value
                 style.fillOpacity = 0.1
@@ -249,7 +231,8 @@ setup_map_visualization = (polygons) ->
          
         # Add a popup for name and value of the area
         onEachFeature: (polygon, layer) ->
-            value = polygon.properties.statistics_row.value
+            value = polygon.properties.statistics.value
+            value = Math.round(value)
             content = "<p>#{polygon.properties.nimi}, keskitulo #{value} euroa</p>"
             layer.bindPopup content
 
