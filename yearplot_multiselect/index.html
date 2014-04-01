@@ -98,9 +98,9 @@ class DataController
 		# simultaneously, any category combination will
 		# get its own line, so they need to be "grouped".
 		# The server (and the proxy)
-		# has a "group_columns" method for this.
+		# has a "group_for_columns" method for this.
 		# Get the needed data and pass it to the plotter
-		substats.group_columns(@axes, category_labels: true).done (data) =>
+		substats.group_for_columns(@axes, category_labels: true).done (data) =>
 			@refresh_plot selection_clone, data
 
 
