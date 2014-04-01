@@ -1,9 +1,18 @@
-<!--
-An example and demo for fetching and plotting data from the statistics API.
-A slightly more complex data handling by allowing multiple class selections.
--->
-
 <link href="../vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+<style type="text/css">
+#map {
+	height: 400px;
+	background-color: white;
+}
+
+#lineplot {
+	height: 400px;
+}
+
+#yearslider {
+	width: 300px;
+}
+</style>
 
 <!-- Elements that will get populated later on -->
 <h1 id="dataset_title"></h1>
@@ -14,8 +23,8 @@ A slightly more complex data handling by allowing multiple class selections.
 
 <div class="container-fluid">
 	<div class="row">
-		<div id="map" class="col-sm-6" style="height: 500px"></div>
-		<div id="lineplot" class="col-sm-6" style="height: 500px"></div>
+		<div id="map" class="col-sm-6"></div>
+		<div id="lineplot" class="col-sm-6"></div>
 	</div>
 </div>
 
@@ -27,25 +36,27 @@ A slightly more complex data handling by allowing multiple class selections.
 <script type="text/javascript" src="../vendor/bootstrap-multiselect.js"></script>
 <script type="text/javascript" src="../vendor/jquery.flot.js"></script>
 <script type="text/javascript" src="../vendor/jquery-deparam.js"></script>
+<script type="text/javascript" src="../vendor/slider/js/bootstrap-slider.js"></script>
+<link rel="stylesheet" href="../vendor/slider/css/slider.css" />
 
 <!--
 Include libraries needed for the visualization. Most of the Leaflet map initialization
 is done in the separate hel_map.coffee file, which sets up the map to use Helsinki's
 official map and its map projection.
 -->
-<link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.2/leaflet.css" />
-<script src="http://cdn.leafletjs.com/leaflet-0.7.2/leaflet.js"></script>
+<link rel="stylesheet" href="../vendor/leaflet.css" />
+<script src="../vendor/leaflet.js"></script>
 <script src="../vendor/proj4.js"></script>
 <script src="../vendor/proj4leaflet.js"></script>
 <script src="../vendor/leaflet-dvf.js"></script>
 <script type="text/coffeescript" src="hel_map.coffee"></script>
 
 <!-- Include the Statproxy class -->
-<script type="text/coffeescript" src="http://localhost:9001/browser/statproxy.coffee"></script>
+<script type="text/coffeescript" src="http://dev.hel.fi/stats/browser/statproxy.coffee"></script>
 <script type="text/coffeescript">
 # URL to the JSON-"entrypoint" of the statistic.
 # Any resource with a 'vuosi' field could be used here
-STAT_RESOURCE="http://localhost:9001/resources/aluesarjat_a01hki_asuntokuntien_tulot/"
+STAT_RESOURCE="http://dev.hel.fi/stats/resources/aluesarjat_a01hki_asuntokuntien_tulot/"
 GEOSERVER_BASE_URL = "http://geoserver.hel.fi/geoserver/"
 
 # Get a "proxy object" to the resource
@@ -136,9 +147,7 @@ class PlotController
 		# a massive dataset, as without filtering, the
 		# default is to return all results.
 		if not is_full @axes
-			$(@plotel).html """
-			<h2 class="ploterror">Please select at least one category for each dimension</h2>
-			"""
+			@refresh_plot {}, []
 			return
 
 		my_selection = _.omit selection, @axes...
@@ -154,9 +163,9 @@ class PlotController
 		# simultaneously, any category combination will
 		# get its own line, so they need to be "grouped".
 		# The server (and the proxy)
-		# has a "group_columns" method for this.
+		# has a "group_for_columns" method for this.
 		# Get the needed data and pass it to the plotter
-		substats.group_columns(@axes, category_labels: true).done (data) =>
+		substats.group_for_columns(@axes, category_labels: true).done (data) =>
 			@refresh_plot selection_clone, data
 
 
@@ -228,7 +237,7 @@ class MapController
 		my_selection = _.omit selection, @axes...
 		substats = @stats.filter my_selection
 		selection_clone = JSON.parse JSON.stringify selection
-		substats.group_columns(@axes).done (data) =>
+		substats.group_for_columns(@axes).done (data) =>
 			@refresh_plot selection_clone, data
 
 	refresh_plot: (selection, data) =>
@@ -237,10 +246,13 @@ class MapController
 		area_and_value = _.zip data[@axes[0]], data[@axes[1]]
 		for [area, value] in area_and_value
 			# Parse the "small-area-id" from the area string
+			# Encoded as (zero padded) number of three digits
+			# in the end. Zero if not 'small area'
 			# TODO: This could be taken as an argument in the
 			#	constructor
-			area_parts = area.split "_"
-			area_id = parseInt(area_parts[1])
+			area_id = area
+			area_id = parseInt area_id[area_id.length-3...]
+			continue if area_id == 0
 			continue if area_id not of @polygons_by_area
 			polygon = @polygons_by_area[area_id]
 			polygon.properties.stat_value = parseFloat value
@@ -251,9 +263,11 @@ class MapController
 		all_values = (p.properties.stat_value for p in enabled_polygons \
 			when not isNaN p.properties.stat_value)
 		# Get rid of really extreme values
+		
+		all_values.sort((a, b) -> a - b)
 
-		min_value = _.min all_values
-		max_value = _.max all_values
+		min_value = all_values[0]
+		max_value = all_values[all_values.length-1]
 		# Creates a green (highest) to red (lowest) colormap
 		value_to_color = new L.HSLHueFunction(
 			new L.Point(min_value,0),
@@ -309,7 +323,7 @@ $.when(spec_promise, polygons_promise).done (args...) ->
 	# Get "free" dimensions, eg on which we have
 	# to select something
 	free_dims = (dim for dim in spec.dimensions \
-		when dim.id != 'value')
+		when dim.id not in ['value', 'vuosi'])
 	
 	multiselect_dims = ['alue']
 	
@@ -332,6 +346,10 @@ $.when(spec_promise, polygons_promise).done (args...) ->
 		</select>
 		""").appendTo selrow
 		is_multiselect = dim.id in multiselect_dims
+		
+		# "Uniselect" selects first by default
+		if not is_multiselect and dim.id not of selection.selection
+			selection.set_selection dim.id, dim.categories[0].id
 	
 		# Synchronize the selection to the dropdowns
 		selection.$.on 'selection_changed', do (dim, selector) -> (ev, args...) ->
@@ -343,10 +361,6 @@ $.when(spec_promise, polygons_promise).done (args...) ->
 				selector.find("option[value=\"#{selected}\"]").attr "selected", "selected"
 			selector.multiselect "refresh"
 
-		# "Uniselect" selects first by default
-		if not is_multiselect and dim.id not of selection.selection
-			selection.set_selection dim.id, dim.categories[0].id
-
 		for cat in dim.categories
 			optel = $("""
 			<option value="#{cat.id}">
@@ -354,10 +368,6 @@ $.when(spec_promise, polygons_promise).done (args...) ->
 			</option>
 			""").appendTo selector
 			
-			#if dim.id of selection.selection and selection.selection[dim.id][cat.id]
-			#	optel.attr "selected", "selected"
-			
-		
 		if is_multiselect
 			selector.attr "multiple", "multiple"
 			onChange = do (dim) -> (el, enabled) ->
@@ -371,11 +381,39 @@ $.when(spec_promise, polygons_promise).done (args...) ->
 		selector.multiselect
 			enableCaseInsensitiveFiltering: true
 			onChange: onChange
+	
+	for dim in spec.dimensions
+		break if dim.id == 'vuosi'
+	
+	# Add year slider
+	
+	# "Select latest year by default
+	selection.set_selection dim.id, dim.categories[dim.categories.length-1].id
+
+	labels.append $ "<th>#{get_label dim}</th>"
+	selrow = $("<td></td>").appendTo selectors
+	$("""
+	<div id="yearvalues"></div>
+	<input type="text" id="yearslider"></input>
+	""").appendTo selrow
+
+	years = (parseInt c.id for c in dim.categories)
+	slider = selrow.find "#yearslider"
+	slider.slider
+		min: _.min years
+		max: _.max years
+	slider.slider().on 'slide', do (dim) -> (ev) ->
+		selection.set_selection dim.id, ev.value
+	refresh_slider = ->
+		value = _.keys(selection.selection['vuosi'])[0]
+		slider.slider 'setValue', parseInt value
+	
 		
 	# Hook up the objects to the selection
 	selection.$.on 'selection_changed', (ev, args...) ->
 		plot.refresh_data args...
 		map.refresh_data args...
+		refresh_slider()
 	
 	# And force initial change
 	selection.trigger_change()
