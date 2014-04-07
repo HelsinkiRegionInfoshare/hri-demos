@@ -57,12 +57,13 @@
 			default:
 				this.picker
 					.addClass('slider-horizontal')
-					.css('width', this.element.outerWidth());
+					.css('width', "100%");
 				this.orientation = 'horizontal';
 				this.stylePos = 'left';
 				this.mousePos = 'pageX';
 				this.sizePos = 'offsetWidth';
-				this.tooltip.addClass('top')[0].style.top = -this.tooltip.outerHeight() - 14 + 'px';
+				//this.tooltip.addClass('top')[0].style.top = this.tooltip.outerHeight() + 14 + 'px';
+				this.tooltip.addClass('bottom')[0].style.top = this.tooltip.outerHeight() + 7 + 'px';
 				break;
 		}
 
@@ -141,6 +142,8 @@
 				mouseenter: $.proxy(this.showTooltip, this),
 				mouseleave: $.proxy(this.hideTooltip, this)
 			});
+		} else if (tooltip === 'always') {
+			this.showTooltip()
 		} else {
 			this.tooltip.addClass('hide');
 		}

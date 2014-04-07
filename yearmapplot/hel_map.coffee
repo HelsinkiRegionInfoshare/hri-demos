@@ -1,4 +1,4 @@
-@hel_leaflet_map = (element) ->
+@hel_leaflet_map = (element, mapopts={}) ->
     crs_name = 'EPSG:3879'
     proj_def = '+proj=tmerc +lat_0=0 +lon_0=25 +k=1 +x_0=25500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs'
 
@@ -21,13 +21,17 @@
         minZoom: 2
         continuousWorld: true
         tms: false
-
-    map = new L.Map element,
+    
+    default_mapopts =
         crs: crs
         continuusWorld: true
         worldCopyJump: false
         zoomControl: true
         layers: [map_layer]
+    
+    #console.log _.extend(default_mapopts, mapopts)
+    map = new L.Map element, _.extend(default_mapopts, mapopts)
+        
     map.setView [60.171944, 24.941389], 5
 
     L.control.scale(imperial: false, maxWidth: 200).addTo map

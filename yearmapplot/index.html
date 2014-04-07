@@ -1,49 +1,24 @@
-<link href="../vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
-<style type="text/css">
-#map {
-	height: 400px;
-	background-color: white;
-}
-
-#lineplot {
-	height: 400px;
-}
-
-#yearslider {
-	width: 300px;
-}
-</style>
-
-<!-- Elements that will get populated later on -->
-<h1 id="dataset_title"></h1>
-<table class="table" id="variable_selectors">
-<thead><tr></tr></thead>
-<tbody><tr></tr></tbody>
-</table>
-
-<div class="container-fluid">
-	<div class="row">
-		<div id="map" class="col-sm-6"></div>
-		<div id="lineplot" class="col-sm-6"></div>
-	</div>
-</div>
-
-<!-- Include some handy libraries -->
+<html>
+<meta charset="utf-8" />
+<head>
+<title></title>
 <script type="text/javascript" src="../vendor/coffee-script.js"></script>
 <script type="text/javascript" src="../vendor/jquery-1.11.0.js"></script>
 <script type="text/javascript" src="../vendor/underscore.js"></script>
 <script type="text/javascript" src="../vendor/bootstrap/js/bootstrap.js"></script>
 <script type="text/javascript" src="../vendor/bootstrap-multiselect.js"></script>
 <script type="text/javascript" src="../vendor/jquery.flot.js"></script>
+<script type="text/javascript" src="../vendor/jquery.flot.resize.js"></script>
 <script type="text/javascript" src="../vendor/jquery-deparam.js"></script>
+<script type="text/javascript" src="../vendor/jquery-ui/jquery-ui.min.js"></script>
+<link rel="stylesheet" href="../vendor/jquery-ui/jquery-ui.css" />
 <script type="text/javascript" src="../vendor/slider/js/bootstrap-slider.js"></script>
 <link rel="stylesheet" href="../vendor/slider/css/slider.css" />
+<script type="text/javascript" src="../vendor/spin.js"></script>
+<script type="text/javascript" src="../vendor/jquery.spin.js"></script>
+<link rel="stylesheet" href="../vendor/jquery.powertip/jquery.powertip.css" />
+<script type="text/javascript" src="../vendor/jquery.powertip/jquery.powertip.js"></script>
 
-<!--
-Include libraries needed for the visualization. Most of the Leaflet map initialization
-is done in the separate hel_map.coffee file, which sets up the map to use Helsinki's
-official map and its map projection.
--->
 <link rel="stylesheet" href="../vendor/leaflet.css" />
 <script src="../vendor/leaflet.js"></script>
 <script src="../vendor/proj4.js"></script>
@@ -53,6 +28,100 @@ official map and its map projection.
 
 <!-- Include the Statproxy class -->
 <script type="text/coffeescript" src="http://dev.hel.fi/stats/browser/statproxy.coffee"></script>
+
+<link href="../vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+<style type="text/css">
+#map {
+	height: 100%;
+	width: 100%;
+	background-color: white;
+	position: absolute;
+	top: 0;
+	left: 0;
+	bottom: 0;
+	right: 0;
+	height: auto;
+	width: auto;
+}
+
+#map .leaflet-control-scale {
+	display: none;
+}
+
+#controls {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	z-index: 1;
+}
+
+#controls > * {
+	background-color: rgba(255,255,255,0.9);
+	padding: 10px;
+}
+
+
+#lineplot {
+	height: 100%;
+	width: 100%;
+	background-color: rgba(255,255,255,0.9)
+}
+
+#lineplot-container {
+	position: absolute;
+	bottom: 10px;
+	left: 10px;
+	width: 500px;
+	height: 300px;
+}
+
+#yearslider_container {
+}
+
+.dropdown-menu {
+	max-width: 400px !important;
+	overflow-x: auto !important;
+}
+
+.variable_label {
+	display: block;
+	font-weight: bold;
+}
+
+.plot_x_label,
+.plot_y_label {
+	font-size: small;
+	font-weight: bold;
+}
+
+
+</style>
+
+</head>
+<body>
+
+<div id="controls" class="container-fluid">
+  <div class="row" id="variable_selectors">
+    <h4 class="col-md-3" id="dataset_title"></h4>
+    <div class="col-md-3 variable_selector" id="yearslider_container"></div>
+  </div>
+</div>
+
+</table>
+
+
+
+<div id="map">
+</div>
+
+<div id="lineplot-container">
+  <div id="lineplot"></div>
+</div>
+
+
+
+
 <script type="text/coffeescript">
 # URL to the JSON-"entrypoint" of the statistic.
 # Any resource with a 'vuosi' field could be used here
@@ -139,9 +208,30 @@ class SelectionController
 	
 
 class PlotController
-	constructor: (@plotel, @stats, @specification, @axes) ->
+	constructor: (@el, @stats, @specification, @axes) ->
+		@$el = $ @el
+		@$el.draggable()
+		@$el.resizable()
+		# Use only horizontal labels, as they can be quite long
+		# and don't wrap nicely when rotated. Yes, it's a table
+		# for layouting.
+		@$el.append $ """
+		<table style="height: 100%; width: 100%;">
+		<tr><td class="plot_y_label" style="text-align: center"></td></tr>
+		<tr><td class="plot_container_cell" style="height: 100%; width: 100%;"></td></tr>
+		<tr><td class="plot_x_label" style="text-align: center"></td></tr>
+		</table>
+		"""
+		@plot_el = @$el.find(".plot_container_cell")[0]
+		@xlabel_el = @$el.find(".plot_x_label")
+		@ylabel_el = @$el.find(".plot_y_label")
+
+		# Convert the specification to an object so it's
+		# nicer to work with
+		@dictspec = Statproxy.specification_to_object @specification
 	
 	refresh_data: (selection, is_full) =>
+		@$el.spin()
 		# Ensure we have at least one selection for
 		# each dimension. Failing to do this will cause
 		# a massive dataset, as without filtering, the
@@ -165,7 +255,7 @@ class PlotController
 		# The server (and the proxy)
 		# has a "group_for_columns" method for this.
 		# Get the needed data and pass it to the plotter
-		substats.group_for_columns(@axes, category_labels: true).done (data) =>
+		substats.group_for_columns(@axes).done (data) =>
 			@refresh_plot selection_clone, data
 
 
@@ -174,9 +264,15 @@ class PlotController
 		# Use only the dimensions that have more than one
 		# option selected.
 		needs_labels = []
+		y_axis_labels = []
 		for dim_id, categories of selection
 			if _.size(categories) > 1
 				needs_labels.push dim_id
+			else if _.size(categories) == 1
+				dim = @dictspec.dimensions[dim_id]
+				cat = dim.categories[(k for k of categories)[0]]
+				y_axis_labels.push cat.label
+
 		
 		# Convert the data to a format that the plotting
 		# library flot understands.
@@ -192,20 +288,31 @@ class PlotController
 			# Generate this group's plot label
 			label = []
 			for k in needs_labels
-				label.push group[k]
+				dim = @dictspec.dimensions[k]
+				label.push dim.categories[group[k]].label
 			datasets.push
 				data: xy
 				label: label.join ' '
 		
+		
+		@ylabel_el.text y_axis_labels.join ', '
+		@xlabel_el.text @dictspec.dimensions[@axes[0]].label
 		# And finally plot the datasets using flot
-		$.plot "#lineplot", datasets,
+		$.plot @plot_el, datasets,
 			series:
 				lines: show: true
 				points: show: true
+			
+		$(@el).spin(false)
 
 class MapController
-	constructor: (@el, @polygons, @stats, @specification, @axes, @selection_control) ->
-		@map = hel_leaflet_map @el
+	constructor: (@el, @polygons, @stats, @specification, @axes,
+			@selection_control, @tooltip_func=((feature) ->)
+			) ->
+		@$el = $ "#"+el
+		@map = hel_leaflet_map @el,
+			zoomControl: false
+		new L.Control.Zoom({ position: 'topright' }).addTo(@map.map)
 		@polygons_by_area = {}
 		for polygon in @polygons.features
 			# Convert the area_id to integer as the datasets
@@ -234,12 +341,16 @@ class MapController
 		@borders_layer.addTo @map.map
 	
 	refresh_data: (selection, is_full) =>
+		@$el.spin()
+		@$el.powerTip
+			followMouse: true
+			manual: true
 		my_selection = _.omit selection, @axes...
 		substats = @stats.filter my_selection
 		selection_clone = JSON.parse JSON.stringify selection
 		substats.group_for_columns(@axes).done (data) =>
 			@refresh_plot selection_clone, data
-
+	
 	refresh_plot: (selection, data) =>
 		enabled_polygons = []
 		data = data[0]
@@ -298,27 +409,48 @@ class MapController
 			if not value
 				style.fillOpacity = 0.1
 			
+	
+			layer = @layers_by_area[polygon.properties.area_id]
+			
 			if area_selection[polygon.properties.raw_area]
 				style.weight = 3
 				style.color = "black"
 				style.dashArray = ''
-				layer = @layers_by_area[polygon.properties.area_id]
 				layer.bringToFront()
-
+			
+			layer.on "mouseover", (e) =>
+				tooltip = @tooltip_func e.target.feature
+				return if not tooltip
+				@$el.data 'powertipjq', tooltip
+				$.powerTip.show @$el
+			layer.on "mouseout", (e) ->
+				$.powerTip.hide @$el
+			
 			return style
 		@borders_layer.setStyle styler
-
+		@$el.spin(false)
 
 # Set up the selection UI when we get the data
 $.when(spec_promise, polygons_promise).done (args...) ->
 	[spec, polygons] = (arg[0] for arg in args)
 	selection = new SelectionController spec
 	plot = new PlotController "#lineplot", stats, spec, ['vuosi', 'value']
-	map = new MapController "map", polygons, stats, spec, ['alue', 'value'], selection
+
+	get_tooltip = (feature) ->
+		prop = feature.properties
+		return $ """
+			<div>
+			<h6>#{prop.nimi}</h6>
+			#{prop.stat_value}
+			</div>
+			"""
+
+	map = new MapController("map", polygons, stats, spec, ['alue', 'value'], selection, get_tooltip)
 	
 	
 	# Set the title
 	$("#dataset_title").html spec.metadata.label
+	$("head title").html spec.metadata.label
 
 	# Get "free" dimensions, eg on which we have
 	# to select something
@@ -335,12 +467,17 @@ $.when(spec_promise, polygons_promise).done (args...) ->
 		return obj.id
 
 	# Set up select boxes for the free variables
-	varsel_el = $ "#variable_selectors"
-	labels = varsel_el.find("thead tr")
-	selectors = varsel_el.find("tbody tr")
+	selectors = $ "#variable_selectors"
 	for dim in free_dims
-		labels.append $ "<th>#{get_label dim}</th>"
-		selrow = $("<td></td>").appendTo selectors
+		#container = $("<li></li>").appendTo selectors
+		#selrow = container
+		#selrow = selectors
+		container = selectors
+		selrow = $("""
+			<div class="variable_selector col-md-3">
+			  <span class="variable_label">#{get_label dim}</span>
+			</div>
+			""").appendTo container
 		selector = $("""
 		<select name="#{dim.id}">
 		</select>
@@ -381,6 +518,8 @@ $.when(spec_promise, polygons_promise).done (args...) ->
 		selector.multiselect
 			enableCaseInsensitiveFiltering: true
 			onChange: onChange
+			maxHeight: 300
+			buttonWidth: "250px"
 	
 	for dim in spec.dimensions
 		break if dim.id == 'vuosi'
@@ -390,10 +529,10 @@ $.when(spec_promise, polygons_promise).done (args...) ->
 	# "Select latest year by default
 	selection.set_selection dim.id, dim.categories[dim.categories.length-1].id
 
-	labels.append $ "<th>#{get_label dim}</th>"
-	selrow = $("<td></td>").appendTo selectors
+	#labels.append $ "<th>#{get_label dim}</th>"
+	selrow = $("#yearslider_container")
 	$("""
-	<div id="yearvalues"></div>
+	<span class="variable_label">#{get_label dim}</span>
 	<input type="text" id="yearslider"></input>
 	""").appendTo selrow
 
@@ -402,6 +541,8 @@ $.when(spec_promise, polygons_promise).done (args...) ->
 	slider.slider
 		min: _.min years
 		max: _.max years
+		tooltip: 'always'
+	
 	slider.slider().on 'slide', do (dim) -> (ev) ->
 		selection.set_selection dim.id, ev.value
 	refresh_slider = ->
@@ -444,3 +585,6 @@ update_url_filtering = (newopts) ->
 	window.location.hash = $.param newstate
 
 </script>
+
+</body>
+</html>
