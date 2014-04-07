@@ -440,6 +440,7 @@ class MapController
 
 # Set up the selection UI when we get the data
 $.when(spec_promise, polygons_promise).done (args...) ->
+	console.log "Got spec and polygons"
 	[spec, polygons] = (arg[0] for arg in args)
 	selection = new SelectionController spec
 	plot = new PlotController "#lineplot", stats, spec, ['vuosi', 'value']
