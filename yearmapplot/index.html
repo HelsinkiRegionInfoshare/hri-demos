@@ -361,7 +361,7 @@ class MapController
 		@$el = $ "#"+el
 		@map = hel_leaflet_map @el,
 			zoomControl: false
-		new L.Control.Zoom({ position: 'topright' }).addTo(@map.map)
+		new L.Control.Zoom({ position: 'bottomright' }).addTo(@map.map)
 		@polygons_by_area = {}
 		for polygon in @polygons.features
 			# Convert the area_id to integer as the datasets
@@ -494,7 +494,11 @@ class MapController
 
 # Set up the selection UI when we get the data
 initial_data_promise = $.when(spec_promise, polygons_promise)
+
+$("body").spin()
+
 initial_data_promise.done (args...) ->
+	$("body").spin(false)
 	# Add global error handler on AJAX failures.
 	$(document).ajaxError ->
 		$.notify """Tietojen lataaminen palvelimelta epäonnistui.""",
