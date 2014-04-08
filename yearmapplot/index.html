@@ -385,6 +385,9 @@ class MapController
 					return if 'raw_area' not of feat.properties
 					raw_area = feat.properties.raw_area
 					@selection_control.toggle @axes[0], raw_area
+			style: ->
+				# Show the polygons only after we get data
+				return {stroke: false, fill: false}
 
 
 		@borders_layer.addTo @map.map
@@ -456,6 +459,8 @@ class MapController
 			# Specify the styling and coloring by value
 			color = value_to_color.evaluate(value)
 			style =
+				stroke: true
+				fill: true
 				color: "white"
 				fillColor: color
 				fillOpacity: 0.7
