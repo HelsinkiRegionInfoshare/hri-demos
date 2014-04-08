@@ -15,7 +15,11 @@
 <script type="text/javascript" src="../vendor/coffee-script.js"></script>
 <script type="text/javascript" src="../vendor/underscore.js"></script>
 <script type="text/javascript" src="../vendor/bootstrap/js/bootstrap.js"></script>
+
+<script type="text/javascript" src="../vendor/chosen/chosen.jquery.js"></script>
+<link rel="stylesheet" href="../vendor/chosen/chosen.css" />
 <script type="text/javascript" src="../vendor/bootstrap-multiselect.js"></script>
+
 <script type="text/javascript" src="../vendor/jquery.flot.js"></script>
 <script type="text/javascript" src="../vendor/jquery.flot.resize.js"></script>
 <script type="text/javascript" src="../vendor/jquery-deparam.js"></script>
@@ -104,6 +108,20 @@
 	font-weight: bold;
 }
 
+.variable_selector .chosen-container {
+	width: 100% !important;
+}
+
+.variable_selector .chosen-container-multi .chosen-choices {
+	overflow-x: auto;
+	overflow-y: hidden;
+	white-space: nowrap;
+}
+
+.variable_selector .chosen-container-multi .chosen-choices li {
+	display: inline-block;
+	float: none;
+}
 
 </style>
 
@@ -214,7 +232,7 @@ class SelectionController
 			if _.isEmpty @selection[dim_id]
 				return false
 		return true
-	
+
 
 class PlotController
 	constructor: (@el, @stats, @specification, @axes) ->
@@ -483,9 +501,6 @@ initial_data_promise.done (args...) ->
 	# Set up select boxes for the free variables
 	selectors = $ "#variable_selectors"
 	for dim in free_dims
-		#container = $("<li></li>").appendTo selectors
-		#selrow = container
-		#selrow = selectors
 		container = selectors
 		selrow = $("""
 			<div class="variable_selector col-md-3">
@@ -506,11 +521,11 @@ initial_data_promise.done (args...) ->
 		selection.$.on 'selection_changed', do (dim, selector) -> (ev, args...) ->
 			selector.find('option').removeAttr "selected"
 			if dim.id not of selection.selection
-				selector.multiselect "refresh"
+				selector.trigger("chosen:updated")
 				return
 			for selected of selection.selection[dim.id]
 				selector.find("option[value=\"#{selected}\"]").attr "selected", "selected"
-			selector.multiselect "refresh"
+			selector.trigger("chosen:updated")
 
 		for cat in dim.categories
 			optel = $("""
@@ -520,20 +535,20 @@ initial_data_promise.done (args...) ->
 			""").appendTo selector
 			
 		if is_multiselect
-			selector.attr "multiple", "multiple"
-			onChange = do (dim) -> (el, enabled) ->
-				selection.update_selection dim.id, el.val(), enabled
-		else
-			onChange = do (dim) -> (el, enabled) ->
-				return if not enabled
-				selection.set_selection dim.id, el.val()
-		
+			selector.attr 'multiple', 'multiple'
+			selector.change do (dim, selector) -> ->
+				selected = $(@).find("option:selected")
+				cats = ($(s).val() for s in selected)
+				selection.set_selection dim.id, cats
 
-		selector.multiselect
-			enableCaseInsensitiveFiltering: true
-			onChange: onChange
-			maxHeight: 300
-			buttonWidth: "250px"
+		else
+			selector.change do (dim, selector) -> ->
+				selected = $(@).find("option:selected")
+				cat = selected.val()
+				selection.set_selection dim.id, [cat]
+		
+		selector.chosen()
+
 	
 	for dim in spec.dimensions
 		break if dim.id == 'vuosi'
