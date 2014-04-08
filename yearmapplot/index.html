@@ -271,18 +271,18 @@ class PlotController
 		@_current_selection = null
 	
 	refresh_data: (selection, is_full) =>
+		my_selection = _.omit selection, @axes...
 		# Ensure we have at least one selection for
 		# each dimension. Failing to do this will cause
 		# a massive dataset, as without filtering, the
 		# default is to return all results.
 		if not is_full @axes
+			@_current_selection = {}
 			@refresh_plot {}, []
 			return
 
-		my_selection = _.omit selection, @axes...
 		# No need to refresh if the selection is same
 		# than we had already plotted
-		console.log my_selection, @_current_selection
 		if _.isEqual my_selection, @_current_selection
 			return
 
@@ -353,6 +353,8 @@ class PlotController
 				points: show: true
 			xaxis:
 				tickDecimals: 0
+			legend:
+				position: "nw"
 			
 		$(@el).spin(false)
 
@@ -396,7 +398,10 @@ class MapController
 		@$el.powerTip
 			followMouse: true
 			manual: true
-
+			closeDelay: 0
+			fadeOutTime: 0
+			fadeInTime: 0
+		
 		@_data_cache = {}
 		
 	refresh_data: (selection, is_full) =>
@@ -486,9 +491,13 @@ class MapController
 				tooltip = @tooltip_func e.target.feature
 				return if not tooltip
 				@$el.data 'powertipjq', tooltip
-				$.powerTip.show @$el
-			layer.on "mouseout", (e) ->
-				$.powerTip.hide @$el
+				@$el.powerTip "show"
+
+			layer.on "mouseout", (e) =>
+				@$el.powerTip "hide"
+				# Without this the powertip won't change
+				# the contents.
+				$.powerTip.hide()
 			
 			return style
 		@borders_layer.setStyle styler
@@ -659,6 +668,10 @@ update_url_filtering = (newopts) ->
 	current = get_url_filtering()
 	newstate = _.extend current, state
 	window.location.hash = $.param newstate
+
+
+		
+
 
 </script>
 
