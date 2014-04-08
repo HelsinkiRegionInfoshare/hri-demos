@@ -11,6 +11,7 @@
 <script type="text/javascript" src="../vendor/es5-shim.min.js"></script>
 <script type="text/javascript" src="../vendor/jquery.xdomainrequest.min.js"></script>
 
+<script type="text/javascript" src="../vendor/notify.min.js"></script>
 <script type="text/javascript" src="../vendor/coffee-script.js"></script>
 <script type="text/javascript" src="../vendor/underscore.js"></script>
 <script type="text/javascript" src="../vendor/bootstrap/js/bootstrap.js"></script>
@@ -439,8 +440,12 @@ class MapController
 		@$el.spin(false)
 
 # Set up the selection UI when we get the data
-$.when(spec_promise, polygons_promise).done (args...) ->
-	console.log "Got spec and polygons"
+initial_data_promise = $.when(spec_promise, polygons_promise)
+initial_data_promise.done (args...) ->
+	# Add global error handler on AJAX failures.
+	$(document).ajaxError ->
+		$.notify """Tietojen lataaminen palvelimelta epäonnistui.""",
+
 	[spec, polygons] = (arg[0] for arg in args)
 	selection = new SelectionController spec
 	plot = new PlotController "#lineplot", stats, spec, ['vuosi', 'value']
@@ -568,6 +573,11 @@ $.when(spec_promise, polygons_promise).done (args...) ->
 	# And force initial change
 	selection.trigger_change()
 
+initial_data_promise.fail ->
+	$.notify """Tietojen lataaminen epäonnistui. Tarkista internet-yhteytesi
+		ja yritä uudelleen päivittämällä sivu.
+		""",
+		autoHide: false
 
 # A helper function to decode the "state"
 # from an url. Using the hash for IE-compatibility :(
