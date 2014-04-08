@@ -267,9 +267,10 @@ class PlotController
 		# Convert the specification to an object so it's
 		# nicer to work with
 		@dictspec = Statproxy.specification_to_object @specification
+		
+		@_current_selection = null
 	
 	refresh_data: (selection, is_full) =>
-		@$el.spin()
 		# Ensure we have at least one selection for
 		# each dimension. Failing to do this will cause
 		# a massive dataset, as without filtering, the
@@ -279,6 +280,16 @@ class PlotController
 			return
 
 		my_selection = _.omit selection, @axes...
+		# No need to refresh if the selection is same
+		# than we had already plotted
+		console.log my_selection, @_current_selection
+		if _.isEqual my_selection, @_current_selection
+			return
+
+		@_current_selection = my_selection
+		@$el.spin()
+		
+
 		# First filter for the selected categories
 		substats = @stats.filter my_selection
 
@@ -377,12 +388,12 @@ class MapController
 
 
 		@borders_layer.addTo @map.map
-	
-	refresh_data: (selection, is_full) =>
-		@$el.spin()
 		@$el.powerTip
 			followMouse: true
 			manual: true
+	
+	refresh_data: (selection, is_full) =>
+		@$el.spin()
 		my_selection = _.omit selection, @axes...
 		substats = @stats.filter my_selection
 		selection_clone = JSON.parse JSON.stringify selection
