@@ -182,38 +182,50 @@ class SelectionController
 		@selection = get_url_filtering()
 		@$ = $ @
 	
-	update_selection: (dimension, category, enabled) =>
-		if dimension not of @selection
-			@selection[dimension] = {}
-		
-		if not enabled
-			delete @selection[dimension][category]
-		else
-			@selection[dimension][category] = enabled
-
+	_do_set_selection: (new_selection) ->
 		# Update the selection to the url
+		@selection = new_selection
 		update_url_filtering @selection
 		@trigger_change()
+	
+	_selection_clone: ->
+		JSON.parse JSON.stringify @selection
+
+	update_selection: (dimension, category, enabled) =>
+		selection = @_selection_clone()
+		if dimension not of selection
+			selection[dimension] = {}
+		
+		if not enabled
+			delete selection[dimension][category]
+		else
+			selection[dimension][category] = enabled
+		@_do_set_selection selection
+
+		
 	
 	set_selection: (dimension, categories) =>
 		if not _.isArray categories
 			categories = [categories]
 		
-		@selection[dimension] = {}
+		selection = @_selection_clone()
+		selection[dimension] = {}
 		for category in categories
-			@selection[dimension][category] = true
-		update_url_filtering @selection
-		@trigger_change()
+			selection[dimension][category] = true
+
+		@_do_set_selection selection
 	
 	toggle: (dimension, category) =>
-		if dimension not of @selection
-			@selection[dimension] = {}
-		if category of @selection[dimension]
-			delete @selection[dimension][category]
+		selection = @_selection_clone()
+		if dimension not of selection
+			selection[dimension] = {}
+		if category of selection[dimension]
+			delete selection[dimension][category]
 		else
-			delete @selection[dimension][category] = true
-		@trigger_change()
-			
+			delete selection[dimension][category] = true
+
+		@_do_set_selection selection
+	
 	
 	trigger_change: =>
 		@$.trigger 'selection_changed', [@selection, @has_full_selection]
@@ -524,7 +536,7 @@ initial_data_promise.done (args...) ->
 				selector.trigger("chosen:updated")
 				return
 			for selected of selection.selection[dim.id]
-				selector.find("option[value=\"#{selected}\"]").attr "selected", "selected"
+				selector.find("option[value=\"#{selected}\"]").prop "selected", "selected"
 			selector.trigger("chosen:updated")
 
 		for cat in dim.categories
@@ -535,9 +547,10 @@ initial_data_promise.done (args...) ->
 			""").appendTo selector
 			
 		if is_multiselect
-			selector.attr 'multiple', 'multiple'
+			selector.prop 'multiple', 'multiple'
 			selector.change do (dim, selector) -> ->
 				selected = $(@).find("option:selected")
+				
 				cats = ($(s).val() for s in selected)
 				selection.set_selection dim.id, cats
 
