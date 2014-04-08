@@ -391,13 +391,21 @@ class MapController
 		@$el.powerTip
 			followMouse: true
 			manual: true
-	
+
+		@_data_cache = {}
+		
 	refresh_data: (selection, is_full) =>
 		@$el.spin()
 		my_selection = _.omit selection, @axes...
-		substats = @stats.filter my_selection
 		selection_clone = JSON.parse JSON.stringify selection
+		my_hashable_selection = JSON.stringify my_selection
+		if my_hashable_selection of @_data_cache
+			@refresh_plot selection_clone, @_data_cache[my_hashable_selection]
+			return
+
+		substats = @stats.filter my_selection
 		substats.group_for_columns(@axes).done (data) =>
+			@_data_cache[my_hashable_selection] = data
 			@refresh_plot selection_clone, data
 	
 	refresh_plot: (selection, data) =>
@@ -602,13 +610,10 @@ initial_data_promise.done (args...) ->
 		slider.slider 'setValue', parseInt value
 	
 	
-	# Debounce to prevent AJAX spam
-	refresh_plot = _.debounce plot.refresh_data, 100
-	refresh_map = _.debounce map.refresh_data, 100
 	# Hook up the objects to the selection
 	selection.$.on 'selection_changed', (ev, args...) ->
-		refresh_plot args...
-		refresh_map args...
+		plot.refresh_data args...
+		map.refresh_data args...
 		refresh_slider()
 	
 	# And force initial change
