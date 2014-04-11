@@ -364,6 +364,12 @@ class MapController
 		@map = hel_leaflet_map @el,
 			zoomControl: false
 		new L.Control.Zoom({ position: 'bottomright' }).addTo(@map.map)
+		
+		@map.map.fitBounds [
+			[60.14112, 24.8278],
+			[60.28228, 25.26318]
+			]
+
 		@polygons_by_area = {}
 		for polygon in @polygons.features
 			# Convert the area_id to integer as the datasets
@@ -374,7 +380,7 @@ class MapController
 			area_id = parseInt(polygon.properties.tunnus)
 			polygon.properties.area_id = area_id
 			@polygons_by_area[area_id] = polygon
-
+		
 		@layers_by_area = {}
 
 		@borders_layer = L.geoJson polygons,
@@ -390,7 +396,6 @@ class MapController
 			style: ->
 				# Show the polygons only after we get data
 				return {stroke: false, fill: false}
-
 
 		@borders_layer.addTo @map.map
 		@$el.powerTip
@@ -434,14 +439,12 @@ class MapController
 			polygon.properties.stat_value = parseFloat value
 			polygon.properties.raw_area = area
 			enabled_polygons.push polygon
-		
+
 		# Calculate the range and colormap from it
 		all_values = (p.properties.stat_value for p in enabled_polygons \
 			when not isNaN p.properties.stat_value)
-		# Get rid of really extreme values
 		
 		all_values.sort((a, b) -> a - b)
-
 		min_value = all_values[0]
 		max_value = all_values[all_values.length-1]
 		# Creates a green (highest) to red (lowest) colormap
