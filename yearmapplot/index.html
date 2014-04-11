@@ -8,7 +8,6 @@
 
 <!-- IE hacks -->
 <meta http-equiv="x-ua-compatible" content="IE=Edge"/>
-<script type="text/javascript" src="../vendor/es5-shim.min.js"></script>
 
 <script type="text/javascript" src="../vendor/notify.min.js"></script>
 <script type="text/javascript" src="../vendor/coffee-script.js"></script>
@@ -40,8 +39,6 @@
 
 <!-- Include the Statproxy class -->
 <script type="text/coffeescript" src="../vendor/statproxy.coffee"></script>
-
-<script type="text/javascript" src="../vendor/xdr.js"></script>
 
 <link href="../vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
 <style type="text/css">
@@ -676,9 +673,16 @@ initial_data_promise.done (args...) ->
 	selection.trigger_change()
 
 initial_data_promise.fail (args...) ->
-	$.notify """Tietojen lataaminen epäonnistui. Tarkista internet-yhteytesi
+	text = """Tietojen lataaminen epäonnistui."""
+	if $.support.cors
+		text += """ Tarkista internet-yhteytesi
 		ja yritä uudelleen päivittämällä sivu.
-		""",
+		"""
+	else
+		text += """ Selaimesi ei tue vaadittavia
+		ominaisuuksia. Sovellus on testattu toimivan
+		Chrome- ja Firefox-selaimilla."""
+	$.notify text,
 		autoHide: false
 	console.log "Initial data promise fail", args
 
