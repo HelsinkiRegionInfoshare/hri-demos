@@ -262,6 +262,14 @@ class PlotController
 		@dictspec = Statproxy.specification_to_object @specification
 		
 		@_current_selection = null
+		
+		$(@plot_el).powerTip
+			followMouse: true
+			manual: true
+			closeDelay: 0
+			fadeOutTime: 0
+			fadeInTime: 0
+
 	
 	refresh_data: (selection, is_full) =>
 		my_selection = _.omit selection, @axes...
@@ -348,7 +356,27 @@ class PlotController
 				tickDecimals: 0
 			legend:
 				position: "nw"
+			grid:
+				hoverable: true
+		
+		# (Re-) connect hover events
+		$plot_el = $ @plot_el
+		$plot_el.off("plothover").on "plothover", (event, pos, item) ->
+			if not item
+				$plot_el.powerTip "hide"
+				# Without this the powertip won't change
+				# the contents.
+				$.powerTip.hide()
+				return
 			
+			$plot_el.data 'powertipjq', $ """
+			<div class="plot_hover_label">
+			<h5>#{item.series.label}</h5>
+			#{item.datapoint[0]}: #{item.datapoint[1]}
+			</div>
+			"""
+			$plot_el.powerTip "show"
+
 		$(@el).spin(false)
 
 class MapController
