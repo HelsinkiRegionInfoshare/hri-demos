@@ -680,6 +680,14 @@ initial_data_promise.fail (args...) ->
 		autoHide: false
 	console.log "Initial data promise fail", args
 
+polygons_promise.fail (args...) ->
+	console.log "Fetching polygons failed", args
+
+spec_promise.fail (args...) ->
+	console.log "Fetching stat spec failed", args
+
+
+
 # A helper function to decode the "state"
 # from an url. Using the hash for IE-compatibility :(
 get_url_filtering = ->
