@@ -663,10 +663,11 @@ initial_data_promise.done (args...) ->
 		slider.slider 'setValue', parseInt value
 	
 	
+	update_map = _.throttle map.refresh_data, 100
 	# Hook up the objects to the selection
 	selection.$.on 'selection_changed', (ev, args...) ->
 		plot.refresh_data args...
-		map.refresh_data args...
+		update_map args...
 		refresh_slider()
 	
 	# And force initial change
