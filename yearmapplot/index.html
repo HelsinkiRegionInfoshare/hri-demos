@@ -77,23 +77,22 @@
 
 #lineplot {
 	position: absolute;
+	display: table;
 	background-color: rgba(255,255,255,0.9);
 	bottom: 10px;
 	left: 10px;
 	padding: 5px;
-}
-
-#lineplot .plot_container {
 	width: 500px;
 	height: 300px;
 }
 
-#yearslider_container {
+#lineplot > div {
+	display: table-row;
 }
 
-.dropdown-menu {
-	max-width: 400px !important;
-	overflow-x: auto !important;
+#lineplot .plot_container {
+	height: 100%;
+	width: 100%;
 }
 
 .variable_label {
@@ -244,18 +243,28 @@ class SelectionController
 class PlotController
 	constructor: (@el, @stats, @specification, @axes) ->
 		@$el = $ @el
-		@$el.draggable()
-		@$el.resizable()
+		
 		# Use only horizontal labels, as they can be quite long
 		# and don't wrap nicely when rotated.
 		@$el.append $ """
 		<h3 class="plot_y_label"></h3>
-		<div class="plot_container"></div>
+		<div class="plot_container">
+			<div class="plot_actual_container" style="height: 100%;"></div>
+		</div>
 		<h4 class="plot_x_label"></h4>
 		"""
-		@plot_el = @$el.find(".plot_container")[0]
+		@plot_el = @$el.find(".plot_actual_container")[0]
 		@xlabel_el = @$el.find(".plot_x_label")
 		@ylabel_el = @$el.find(".plot_y_label")
+		
+		# The jquery-ui plugins use the top-property, so
+		# swapidi swap. Causes a bit weird behavior on window
+		# resize, but definitely less weird than without it
+		@$el.css
+			top: @$el.position().top
+			bottom: "auto"
+
+		@$el.draggable().resizable()
 
 		# Convert the specification to an object so it's
 		# nicer to work with
