@@ -673,11 +673,12 @@ initial_data_promise.done (args...) ->
 	# And force initial change
 	selection.trigger_change()
 
-initial_data_promise.fail ->
+initial_data_promise.fail (args...) ->
 	$.notify """Tietojen lataaminen epäonnistui. Tarkista internet-yhteytesi
 		ja yritä uudelleen päivittämällä sivu.
 		""",
 		autoHide: false
+	console.log "Initial data promise fail", args
 
 # A helper function to decode the "state"
 # from an url. Using the hash for IE-compatibility :(
