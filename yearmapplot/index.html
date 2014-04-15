@@ -123,6 +123,16 @@
 	float: none;
 }
 
+#map_colormap_legend {
+	position: absolute;
+	width: 300px;
+	padding: 10px;
+	bottom: 10px;
+	right: 50px;
+	background-color: rgba(255,255,255,0.9);
+
+}
+
 </style>
 
 </head>
@@ -137,7 +147,7 @@
 
 <div id="map">
 </div>
-
+<div id="map_colormap_legend"></div>
 <div id="lineplot"></div>
 
 
@@ -483,6 +493,9 @@ class MapController
 			new L.Point(min_value,0),
 			new L.Point(max_value,120))
 
+		set_colormap_legend($("#map_colormap_legend"), [min_value, max_value],
+			(val) -> value_to_color.evaluate(val))
+
 		if @axes[0] of selection
 			area_selection = selection[@axes[0]]
 		else
@@ -718,10 +731,39 @@ update_url_filtering = (newopts) ->
 	newstate = _.extend current, state
 	window.location.hash = $.param newstate
 
+set_colormap_legend = ($el, range, colormap, opts={}) ->
+	$el.empty()
+	steps = opts.steps ? 10
+	stepsize = (range[1] - range[0])/(steps-1)
+	value = range[0]
+	
+	binheight = opts.binheight ? "10px"
+	width = 100/steps + "%"
+	
+	scale = $("""<ul class="colormap_scale" style="clear: both; padding: 10px;">""")
+		.appendTo $el
+	$el.append $ """
+		<div style="float: left; width: 50%">#{range[0]}</div>
+		"""
+	$el.append $ """
+		<div style="float: right; width: 50%; text-align: right;">#{range[1]}</div>
+		"""
 
-		
-
-
+	
+	binvalues = (range[0] + i*stepsize for i in [0...steps])
+	for value in binvalues
+		bin = $("""<li>""").appendTo scale
+		bin.css
+			"background-color": colormap(value)
+			width: width
+			height: binheight
+			display: "block"
+			float: "left"
+			margin: 0
+			padding: 0
+		bin.prop "title", value
+		value += stepsize
+	
 </script>
 
 </body>
