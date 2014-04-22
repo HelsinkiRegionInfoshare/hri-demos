@@ -1,10 +1,22 @@
+if $.support.cors
+	crossdomain_json = $.getJSON
+else
+	crossdomain_json = (url) ->
+		promise = $.ajax url,
+			jsonp: 'callback'
+			dataType: 'jsonp'
+			cache: true
+			crossDomain: true
+		return promise
+		
+
 class @Statproxy
-	constructor: (@url) ->
+	constructor: (@url, @getjson=crossdomain_json) ->
 		if @url[0] != '/'
 			@url = @url+'/'
 	
 	specification: =>
-		return $.getJSON @url
+		return @getjson @url
 	
 	@specification_to_object: (spec) =>
 		dictspec = _.clone spec
@@ -41,10 +53,10 @@ class @Statproxy
 		return new Statproxy(url)
 
 	entries: =>
-		return $.getJSON @url + "/entries"
+		return @getjson @url + "/entries"
 
 	columns: =>
-		return $.getJSON @url + "/columns"
+		return @getjson @url + "/columns"
 	
 	group_for_columns: (as_values, opts={}) =>
 		as_values = as_values.join(',')
@@ -53,5 +65,5 @@ class @Statproxy
 		opts = $.param opts
 		if opts
 			url += "&" + opts
-		return $.getJSON url
+		return @getjson url
 		

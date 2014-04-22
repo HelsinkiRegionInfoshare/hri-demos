@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <!--
 An example of combining Helsinki region's statistical data with city area polygons
 from geoserver.hel.fi. Combines these to visualize average wages of city areas
@@ -16,7 +17,7 @@ the Ajax requests and underscore.js for all sorts of handy stuff.
 Include the Statproxy-class to fetch the statistical data from
 the statistics API
 -->
-<script type="text/coffeescript" src="http://dev.hel.fi/stats/browser/statproxy.coffee"></script>
+<script type="text/coffeescript" src="../vendor/statproxy.coffee"></script>
 
 <!--
 The following block fetches the datasets and combines them. The
@@ -124,8 +125,9 @@ requests_promise = $.when(
     polygons_promise)
 requests_promise.done(process_data)
 # Very rudimentary error handling.
-requests_promise.fail( ->
+requests_promise.fail( (args...) ->
     alert("Fetching data failed. See Javascript console for details.")
+    console.log "Failed to get data", args
     )
 </script>
 

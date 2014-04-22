@@ -1,9 +1,15 @@
+<!DOCTYPE html>
 <!--
 An example and demo for fetching and plotting data from the statistics API.
 A slightly more complex data handling by allowing multiple class selections.
 -->
 
 <link href="../vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+
+<!-- IE hacks -->
+<script type="text/javascript" src="../vendor/es5-shim.min.js"></script>
+<script type="text/javascript" src="../vendor/excanvas.min.js"></script>
+
 
 <!-- Elements that will get populated later on -->
 <h1 id="dataset_title"></h1>
@@ -23,7 +29,7 @@ A slightly more complex data handling by allowing multiple class selections.
 <script type="text/javascript" src="../vendor/jquery-deparam.js"></script>
 
 <!-- Include the Statproxy class -->
-<script type="text/coffeescript" src="http://dev.hel.fi/stats/browser/statproxy.coffee"></script>
+<script type="text/coffeescript" src="../vendor/statproxy.coffee"></script>
 <script type="text/coffeescript">
 # URL to the JSON-"entrypoint" of the statistic.
 # Any resource with a 'vuosi' field could be used here
