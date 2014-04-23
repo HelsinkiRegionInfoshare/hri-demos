@@ -5,6 +5,21 @@ from geoserver.hel.fi. Combines these to visualize average wages of city areas
 on map.
 -->
 
+<html>
+<head>
+
+<!-- IE hacks -->
+<script type="text/javascript" src="../vendor/es5-shim.min.js"></script>
+<!--[if IE]>
+<script type="text/javascript" src="../vendor/tinycolor-min.js"></script>
+<script type="text/javascript">
+window.mangle_hsl_color = function (hsl) {
+    return tinycolor(hsl).toRgbString()
+}
+</script>
+<![endif]-->
+
+
 <!--
 Include libraries for fetching and combining the datasets.
 We use Coffee script as the programming language, jQuery for handling
@@ -62,13 +77,28 @@ request_parameters = {
     version: '1.1.0'
     request: 'GetFeature'
     outputFormat: 'application/json'
+}
+
+request_options = {}
+# Use JSONP for browsers that don't support
+# CORS
+if not $.support.cors
+    request_parameters.outputFormat = 'text/javascript'
+    request_options = {
+        dataType: "jsonp"
+        jsonp: true
+        # Geoserver has nonstandard JSONP conventions, so
+        # we'll override the callback manually
+        jsonpCallback: "parseResponse"
     }
-polygons_promise = $.getJSON(wfs_url, request_parameters)
+
+request_options.data = request_parameters
+polygons_promise = $.ajax wfs_url, request_options
 
 # Declare a deferred object that will be triggered when the
 # data processing is done. Will be used to set up the map visualization
 # later on. Declared as a global so it can be accessed from the visualization
-# code.
+# code in a different code block below.
 @data_processed_promise = $.Deferred()
 # Function for processing the processing the data after the requests are done.
 # This is used as a callback for the data requests below.
@@ -144,6 +174,12 @@ runs.
     background-color: white;
 }
 
+html,
+body {
+    margin: 0;
+    height: 100%;
+}
+
 .title {
     position: fixed;
     left: 80px;
@@ -151,7 +187,9 @@ runs.
     font-size: 12pt;
 }
 </style>
+</head>
 
+<body>
 <h1 class="title">
 Helsingin yli 15 vuotiaiden keskitulo alueittain vuonna 2011.
 </h1>
@@ -219,6 +257,10 @@ setup_map_visualization = (polygons) ->
         
             # Specify the styling and coloring by value
             color = value_to_color.evaluate(value)
+            # IE doesn't support HSL :(
+            if window.mangle_hsl_color
+                color = mangle_hsl_color(color)
+
             style = {
                 color: "black",
                 fillColor: color,
@@ -241,4 +283,5 @@ setup_map_visualization = (polygons) ->
 
 data_processed_promise.done(setup_map_visualization)
 </script>
-
+</body>
+</html>

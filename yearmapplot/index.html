@@ -4,11 +4,19 @@
 <head>
 <title></title>
 
-<script type="text/javascript" src="../vendor/jquery-1.11.0.js"></script>
-
 <!-- IE hacks -->
-<meta http-equiv="x-ua-compatible" content="IE=Edge"/>
+<script type="text/javascript" src="../vendor/es5-shim.min.js"></script>
+<script type="text/javascript" src="../vendor/excanvas.min.js"></script>
+<!--[if IE]>
+<script type="text/javascript" src="../vendor/tinycolor-min.js"></script>
+<script type="text/javascript">
+window.mangle_hsl_color = function (hsl) {
+    return tinycolor(hsl).toRgbString()
+}
+</script>
+<![endif]-->
 
+<script type="text/javascript" src="../vendor/jquery-1.11.0.js"></script>
 <script type="text/javascript" src="../vendor/notify.min.js"></script>
 <script type="text/javascript" src="../vendor/coffee-script.js"></script>
 <script type="text/javascript" src="../vendor/underscore.js"></script>
@@ -42,6 +50,12 @@
 
 <link href="../vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
 <style type="text/css">
+body, html {
+	width: 100%;
+	height: 100%;
+	margin: 0;
+}
+
 #map {
 	height: 100%;
 	width: 100%;
@@ -140,8 +154,8 @@
 
 <div id="controls" class="container-fluid">
   <div class="row" id="variable_selectors">
-    <h4 class="col-md-3" id="dataset_title"></h4>
-    <div class="col-md-3 variable_selector" id="yearslider_container"></div>
+	<h4 class="col-md-3" id="dataset_title"></h4>
+	<div class="col-md-3 variable_selector" id="yearslider_container"></div>
   </div>
 </div>
 
@@ -167,19 +181,41 @@ stats = new Statproxy STAT_RESOURCE
 # in the dataset.
 spec_promise = stats.specification()
 
+
 # Fetch the area polygons in GeoJSON format using WFS
 wfs_url = GEOSERVER_BASE_URL + "wfs/"
 request_parameters = {
-    # Specify the dataset to use
-    typeName: 'hel:osaalue'
-    # Standard WFS request parameters
-    srsName: 'EPSG:4326'
-    service: 'WFS'
-    version: '1.1.0'
-    request: 'GetFeature'
-    outputFormat: 'application/json'
-    }
-polygons_promise = $.getJSON(wfs_url, request_parameters)
+	# Specify the dataset to use
+	typeName: 'hel:osaalue'
+	# Standard WFS request parameters
+	srsName: 'EPSG:4326'
+	service: 'WFS'
+	version: '1.1.0'
+	request: 'GetFeature'
+	outputFormat: 'application/json'
+}
+
+request_options = {}
+
+# This would work with IE8, but everything else is a mess
+# (it eg. runs out of memory), so give up on non-CORS browsers
+# for now.
+###
+# Use JSONP for browsers that don't support
+# CORS
+if not $.support.cors
+	request_parameters.outputFormat = 'text/javascript'
+	request_options = {
+		dataType: "jsonp"
+		jsonp: true
+		# Geoserver has nonstandard JSONP conventions, so
+		# we'll override the callback manually
+		jsonpCallback: "parseResponse"
+	}
+###
+
+request_options.data = request_parameters
+polygons_promise = $.ajax wfs_url, request_options
 
 class SelectionController
 	constructor: (@specification) ->
@@ -226,7 +262,7 @@ class SelectionController
 		if category of selection[dimension]
 			delete selection[dimension][category]
 		else
-			delete selection[dimension][category] = true
+			selection[dimension][category] = true
 
 		@_do_set_selection selection
 	
@@ -510,6 +546,9 @@ class MapController
 				value = max_value
 			# Specify the styling and coloring by value
 			color = value_to_color.evaluate(value)
+			# IE(8) doesn't support HSL :(
+			if window.mangle_hsl_color
+				color = mangle_hsl_color(color)
 			style =
 				stroke: true
 				fill: true
@@ -548,8 +587,12 @@ class MapController
 		@borders_layer.setStyle styler
 		@$el.spin(false)
 
-# Set up the selection UI when we get the data
-initial_data_promise = $.when(spec_promise, polygons_promise)
+# Set up the selection UI when we get the data.
+# Also hook a body onload promise here, as IE(8)
+# won't play ball without.
+onload_promise = $.Deferred()
+$ -> onload_promise.resolve(null)
+initial_data_promise = $.when(spec_promise, polygons_promise, onload_promise)
 
 $("body").spin()
 
@@ -558,8 +601,10 @@ initial_data_promise.done (args...) ->
 	# Add global error handler on AJAX failures.
 	$(document).ajaxError ->
 		$.notify """Tietojen lataaminen palvelimelta epäonnistui.""",
+	 
+	spec = args[0][0]
+	polygons = args[1][0]
 
-	[spec, polygons] = (arg[0] for arg in args)
 	selection = new SelectionController spec
 	plot = new PlotController "#lineplot", stats, spec, ['vuosi', 'value']
 
@@ -577,7 +622,7 @@ initial_data_promise.done (args...) ->
 	
 	# Set the title
 	$("#dataset_title").html spec.metadata.label
-	$("head title").html spec.metadata.label
+	document.title = spec.metadata.label
 
 	# Get "free" dimensions, eg on which we have
 	# to select something
@@ -693,8 +738,7 @@ initial_data_promise.fail (args...) ->
 		"""
 	else
 		text += """ Selaimesi ei tue vaadittavia
-		ominaisuuksia. Sovellus on testattu toimivan
-		Chrome- ja Firefox-selaimilla."""
+		teknisiä ominaisuuksia. Sovellus on testattu toimivaksi Chrome- ja Firefox-selaimilla."""
 	$.notify text,
 		autoHide: false
 	console.log "Initial data promise fail", args
