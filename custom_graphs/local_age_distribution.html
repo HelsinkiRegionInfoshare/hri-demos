@@ -61,65 +61,37 @@ render_plot = (opts) ->
 		areas = [opts.selected_area]
 	else
 		areas = [ref_area.id]
-	ref_stats = stats.filter alue: areas
+	year = opts.year ? 2013
+
+	ref_stats = stats.filter
+		alue: areas
+		vuosi: year
 
 	age_colors = ['rgb(165,0,38)','rgb(215,48,39)','rgb(244,109,67)','rgb(253,174,97)','rgb(254,224,139)','rgb(217,239,139)','rgb(166,217,106)','rgb(102,189,99)','rgb(26,152,80)','rgb(0,104,55)']
 	age_colors.reverse()
 
-	ref_stats.group_for_columns(['vuosi', 'value']).done (cols) ->
-		cols = cols.filter (g) -> g.ika != '99V'
-		get_age_group = (group) ->
-			start_age = parseInt group.ika[...2]
-			start_age - start_age%10
+	ref_stats.entries(['age', 'value']).done (rows) ->
+		rows = rows.filter (r) -> r.ika != '99V'
+		get_age_group = (row) ->
+			start_age = parseInt row.ika[...2]
+			start_age - start_age%5
 		
-		regrouped = []
-		for grp, col of _.groupBy cols, get_age_group
-			grp = parseInt grp
-			values = []
-			for row in _.zip((c.value for c in col)...)
-				row = row.map parseFloat
-				sum = _.reduce row, ((a, b) -> a+b), 0
-				values.push sum
-
-			re = [col[0].vuosi.map(parseFloat), values]
-			re.group = grp
-			re.group_label = "#{grp}-#{grp+9} vuotiaat"
-			regrouped.push re
-		lastgroup = regrouped[regrouped.length-1]
-		lastgroup.group_label = "Yli #{lastgroup.group} vuotiaat"
-
-		datasets = []
-		for group in regrouped
-			#year = group['vuosi'].map parseFloat
-			#value = group['value'].map parseFloat
-			#ref_i = year.indexOf ref_year
-			#ref_value = value[ref_i]
-			[year, value] = group
-			start_i = year.indexOf start_year
-			xy = _.zip year, value
+		data = []
+		for grp, grpdata of _.groupBy rows, get_age_group
+			total = _.reduce (parseFloat(g.value) for g in grpdata), ((a,b) -> a+b), 0
+			data.push [parseInt(grp), total]
 			
-			xy = xy.filter ([year, value]) -> year >= start_year
-
-			#age_group = parseInt group.ika[0]
-			#area_name = area_dim.categories[group.alue].label
-			#age_group_name = spec.dimensions.ika.categories[group.ika].label
-			age_group_name = group.group_label
-			datasets.push
-				data: xy
-				color: age_colors[group.group/10]
-				fill: 1.0
-				label: age_group_name
-
-		$.plot "#graph", datasets,
-			series:
-				stack: true
-			lines:
-				fill: true
+		
+		console.log data
+		$.plot "#graph", [data],
 			axisLabels: show: true
+			bars:
+				show: true
+				barWidth: 5
 			xaxis: tickDecimals: 0
-			xaxes: [{axisLabel: 'Vuosi'}]
+			xaxes: [{axisLabel: 'Ikäryhmä'}]
 			yaxes: [{axisLabel: 'Henkilöiden määrä'}]
-			legend: position: "nw"
+			legend: position: "ne"
 		$("#graph").spin(false)
 
 setup_selector = (opts) ->
