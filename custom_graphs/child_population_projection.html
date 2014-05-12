@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <!-- IE hacks -->
 <script type="text/javascript" src="../vendor/es5-shim.min.js"></script>
+<script type="text/javascript" src="../vendor/excanvas.min.js"></script>
 
 <script type="text/javascript" src="../vendor/coffee-script.js"></script>
 <script type="text/javascript" src="../vendor/jquery-1.11.0.js"></script>
@@ -114,6 +115,7 @@ render_plot = (opts) ->
 				label: age_group_name
 		$.plot "#graph", datasets,
 			axisLabels: show: true
+			xaxis: tickDecimals: 0
 			xaxes: [{axisLabel: 'Vuosi'}]
 			yaxes: [{axisLabel: 'Henkilöiden määrä'}]
 			legend: position: "nw"
