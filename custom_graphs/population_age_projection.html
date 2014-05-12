@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- IE hacks -->
+<script type="text/javascript" src="../vendor/es5-shim.min.js"></script>
+
+<script type="text/javascript" src="../vendor/coffee-script.js"></script>
+<script type="text/javascript" src="../vendor/jquery-1.11.0.js"></script>
+<script type="text/javascript" src="../vendor/jquery-deparam.js"></script>
+<script type="text/javascript" src="../vendor/underscore.js"></script>
+<script type="text/javascript" src="../vendor/bootstrap/js/bootstrap.js"></script>
+<script type="text/javascript" src="../vendor/bootstrap-multiselect.js"></script>
+<script type="text/javascript" src="../vendor/jquery.flot.js"></script>
+<script type="text/javascript" src="../vendor/jquery.flot.stack.js"></script>
+<script type="text/javascript" src="../vendor/jquery.flot.resize.js"></script>
+<script type="text/javascript" src="../vendor/jquery.flot.axislabels.js"></script>
+<script type="text/coffeescript" src="../vendor/statproxy.coffee"></script>
+
+<script type="text/javascript" src="../vendor/signals.js"></script>
+<script type="text/javascript" src="../vendor/hasher.js"></script>
+
+<script type="text/javascript" src="../vendor/chosen/chosen.jquery.js"></script>
+<link rel="stylesheet" href="../vendor/chosen/chosen.css" />
+
+<script type="text/javascript" src="../vendor/spin.js"></script>
+<script type="text/javascript" src="../vendor/jquery.spin.js"></script>
+</head>
+<body style="margin: 0;">
+<body style="margin: 0;">
+<table style="position: fixed; width: 100%; height: 100%">
+<tr><td><span id="area_selector"></span></td></tr>
+<tr style="height: 100%; margin: 0; padding: 0;"><td>
+<div id="graph" style="width: 100%; height: 100%;"></div>
+</tr></td>
+</table>
+
+
+<script type="text/coffeescript">
+DATASET_URL="http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
+
+$("body").spin()
+
+statproxy = new Statproxy DATASET_URL
+spec = null
+statproxy.specification().done (myspec) ->
+	spec = myspec
+	spec = Statproxy.specification_to_object spec
+	init_controller()
+
+render_plot = (opts) ->
+	$("#graph").spin()
+	selected_age = opts.selected_age ? spec.dimensions['ika'].category_order[0]
+	#stats = statproxy.filter ika: selected_age
+	stats = statproxy
+	
+	ref_year = 2013
+	start_year = 2003
+
+	area_dim = spec.dimensions['alue']
+	ref_area = area_dim.categories[area_dim.category_order[0]]
+	ref_filter = {}
+	
+	if "selected_area" of opts
+		areas = [opts.selected_area]
+	else
+		areas = [ref_area.id]
+	ref_stats = stats.filter alue: areas
+
+	age_colors = ['rgb(165,0,38)','rgb(215,48,39)','rgb(244,109,67)','rgb(253,174,97)','rgb(254,224,139)','rgb(217,239,139)','rgb(166,217,106)','rgb(102,189,99)','rgb(26,152,80)','rgb(0,104,55)']
+	age_colors.reverse()
+
+	ref_stats.group_for_columns(['vuosi', 'value']).done (cols) ->
+		cols = cols.filter (g) -> g.ika != '99V'
+		get_age_group = (group) ->
+			start_age = parseInt group.ika[...2]
+			start_age - start_age%10
+		
+		regrouped = []
+		for grp, col of _.groupBy cols, get_age_group
+			grp = parseInt grp
+			values = []
+			for row in _.zip((c.value for c in col)...)
+				row = row.map parseFloat
+				sum = _.reduce row, ((a, b) -> a+b), 0
+				values.push sum
+
+			re = [col[0].vuosi.map(parseFloat), values]
+			re.group = grp
+			re.group_label = "#{grp}-#{grp+9} vuotiaat"
+			regrouped.push re
+		lastgroup = regrouped[regrouped.length-1]
+		lastgroup.group_label = "Yli #{lastgroup.group} vuotiaat"
+
+		datasets = []
+		for group in regrouped
+			#year = group['vuosi'].map parseFloat
+			#value = group['value'].map parseFloat
+			#ref_i = year.indexOf ref_year
+			#ref_value = value[ref_i]
+			[year, value] = group
+			start_i = year.indexOf start_year
+			xy = _.zip year, value
+			
+			xy = xy.filter ([year, value]) -> year >= start_year
+
+			#age_group = parseInt group.ika[0]
+			#area_name = area_dim.categories[group.alue].label
+			#age_group_name = spec.dimensions.ika.categories[group.ika].label
+			age_group_name = group.group_label
+			datasets.push
+				data: xy
+				color: age_colors[group.group/10]
+				fill: 1.0
+				label: age_group_name
+		$.plot "#graph", datasets,
+			series:
+				stack: true
+			lines:
+				fill: true
+			axisLabels: show: true
+			xaxis: tickDecimals: 0
+			xaxes: [{axisLabel: 'Vuosi'}]
+			yaxes: [{axisLabel: 'Henkilöiden määrä'}]
+			legend: position: "nw"
+		$("#graph").spin(false)
+
+setup_selector = (opts) ->
+	area_dim = spec.dimensions['alue']
+	selector = $("<select></select>").appendTo $ "#area_selector"
+	for area_id in area_dim.category_order
+		option = $ """
+			<option value="#{area_id}">
+			#{area_dim.categories[area_id].label}
+			</option>
+			"""
+		if area_id == opts.selected_area
+			option.prop "selected", "selected"
+		selector.append option
+	selector.chosen()
+	selector.change ->
+		value = @options[@selectedIndex].value
+		set_hash_param "selected_area", value
+	
+	age_dim = spec.dimensions['ika']
+	selector = $("<select multiple='multiple'></select>").appendTo $ "#age_selector"
+	$("body").spin(false)
+
+get_hash_params = ->
+	param = $.deparam hasher.getHash()
+	if 'selected_age' not in param
+		param.selected_age = []
+	return param
+
+set_hash_param = (name, value) ->
+	param = $.deparam hasher.getHash()
+	param[name] = value
+	hasher.setHash $.param param
+
+hash_changed = (new_hash, old_hash) ->
+	render_plot get_hash_params()
+
+init_controller = ->
+	hasher.prependHash = ''
+	hasher.changed.add hash_changed
+	hasher.initialized.add hash_changed
+	hasher.initialized.add (new_hash) ->
+		setup_selector get_hash_params()
+	hasher.init()
+</script>
+</body>
+</html>
