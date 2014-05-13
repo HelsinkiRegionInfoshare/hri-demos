@@ -18,6 +18,8 @@
 <script type="text/javascript" src="../vendor/jquery.flot.axislabels.js"></script>
 <script type="text/coffeescript" src="../vendor/statproxy.coffee"></script>
 
+<link href="../vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+
 <script type="text/javascript" src="../vendor/signals.js"></script>
 <script type="text/javascript" src="../vendor/hasher.js"></script>
 
@@ -26,9 +28,18 @@
 
 <script type="text/javascript" src="../vendor/spin.js"></script>
 <script type="text/javascript" src="../vendor/jquery.spin.js"></script>
+
+<script type="text/javascript" src="../vendor/slider/js/bootstrap-slider.js"></script>
+<link rel="stylesheet" href="../vendor/slider/css/slider.css" />
+
 </head>
 <body style="margin: 0;">
-<span id="area_selector"></span>
+<table id="variable_selectors"><tr>
+<td><span id="area_selector"></span></td>
+<td style="width: 100%; padding-left: 20px; padding-right: 40px;">
+  <span id="yearslider"></span>
+</td>
+</tr></table>
 <div id="graph" style="position: fixed; width: 100%; top: 32px; bottom: 0;"></div>
 
 
@@ -46,8 +57,6 @@ statproxy.specification().done (myspec) ->
 
 render_plot = (opts) ->
 	$("#graph").spin()
-	selected_age = opts.selected_age ? spec.dimensions['ika'].category_order[0]
-	#stats = statproxy.filter ika: selected_age
 	stats = statproxy
 	
 	ref_year = 2013
@@ -61,14 +70,10 @@ render_plot = (opts) ->
 		areas = [opts.selected_area]
 	else
 		areas = [ref_area.id]
-	year = opts.year ? 2013
-
+	
 	ref_stats = stats.filter
 		alue: areas
-		vuosi: year
-
-	age_colors = ['rgb(165,0,38)','rgb(215,48,39)','rgb(244,109,67)','rgb(253,174,97)','rgb(254,224,139)','rgb(217,239,139)','rgb(166,217,106)','rgb(102,189,99)','rgb(26,152,80)','rgb(0,104,55)']
-	age_colors.reverse()
+		vuosi: opts.year
 
 	ref_stats.entries(['age', 'value']).done (rows) ->
 		rows = rows.filter (r) -> r.ika != '99V'
@@ -82,7 +87,6 @@ render_plot = (opts) ->
 			data.push [parseInt(grp), total]
 			
 		
-		console.log data
 		$.plot "#graph", [data],
 			axisLabels: show: true
 			bars:
@@ -113,16 +117,34 @@ setup_selector = (opts) ->
 	
 	age_dim = spec.dimensions['ika']
 	selector = $("<select multiple='multiple'></select>").appendTo $ "#age_selector"
+	years = spec.dimensions['vuosi'].category_order.map parseFloat
+	
+	slider = $("#yearslider").slider
+		min: _.min years
+		max: _.max years
+		value: parseFloat opts.year
+		tooltip: 'always'
+	
+	update_year = _.debounce(
+		((year) -> (set_hash_param "year", year)),
+		100)
+
+	slider.slider().on 'slide', (ev) ->
+		# The bootstrap-slider's tooltip update is
+		# a bit broken, so let's hack
+		slider.parent().find('.tooltip-inner').text ev.value
+		update_year ev.value
+		
 	$("body").spin(false)
 
 get_hash_params = ->
 	param = $.deparam hasher.getHash()
-	if 'selected_age' not in param
-		param.selected_age = []
+	if 'year' not of param
+		param.year = 2013
 	return param
 
 set_hash_param = (name, value) ->
-	param = $.deparam hasher.getHash()
+	param = get_hash_params()
 	param[name] = value
 	hasher.setHash $.param param
 
@@ -133,7 +155,7 @@ init_controller = ->
 	hasher.prependHash = ''
 	hasher.changed.add hash_changed
 	hasher.initialized.add hash_changed
-	hasher.initialized.add (new_hash) ->
+	hasher.initialized.add ->
 		setup_selector get_hash_params()
 	hasher.init()
 </script>
