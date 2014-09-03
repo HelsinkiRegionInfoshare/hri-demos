@@ -1,0 +1,275 @@
+<script type="text/javascript" src="../vendor/coffee-script.js"></script>
+<script type="text/javascript" src="../vendor/jquery-1.11.0.js"></script>
+<script type="text/javascript" src="../vendor/underscore.js"></script>
+
+<link rel="stylesheet" href="../vendor/leaflet.css" />
+<script src="../vendor/leaflet.js"></script>
+<script src="../vendor/proj4.js"></script>
+<script src="../vendor/proj4leaflet.js"></script>
+<script src="../vendor/leaflet-dvf.js"></script>
+<script type="text/coffeescript" src="hel_map.coffee"></script>
+
+<script src="../vendor/d3.v3.min.js"></script>
+<script src="../vendor/dimple.v2.1.0.js"></script>
+<link rel="stylesheet" href="../vendor/c3.css"></style>
+
+<link rel="stylesheet" href="../vendor/jquery.powertip/jquery.powertip.css" />
+<script type="text/javascript" src="../vendor/jquery.powertip/jquery.powertip.js"></script>
+
+<script type="text/coffeescript" src="statsmap.coffee"></script>
+
+<style type="text/css">
+#map_colormap_legend .colormap_scale {
+	padding: 0; margin: 0;
+}
+
+#map_colormap_legend {
+	font-size: small;
+}
+</style>
+
+<div id="map_container" style="width: 500px;">
+ <div id="map" style="width: 100%; height: 400px;"></div>
+ <div id="map_colormap_legend"></div>
+</div>
+<div id="timeseries_container" style="width: 500px; height: 400px">
+ <svg id="timeseries" style="width: 100%; height: 100%"></svg>
+</div>
+
+<script type="text/coffeescript">
+
+geojson_area_id = (feature) -> parseInt feature.properties.tunnus
+
+objectify_spec = (spec) ->
+	objectify_list = (list) ->
+		for value in list
+			if _.isObject(value) and 'id' of value
+				list[value.id] = value
+			objectify_spec value
+
+	objectify_object = (spec) ->
+		for key, value of spec
+			objectify_spec value
+	
+	if _.isArray spec
+		objectify_list spec
+	if _.isObject spec
+		objectify_object spec
+	
+	return spec
+
+class AluesarjatIndicator
+	@_get_area_id = (area_code) ->
+		numeric = parseInt area_code[area_code.length-3...]
+		if numeric != 0
+			return numeric
+		else
+			return area_code
+	
+	@New: (args...) ->
+		$.getJSON(@base_url)
+		.then (spec) =>
+			objectify_spec spec
+			self = new @(spec, args...)
+
+	constructor: (@metadata) ->
+		@base_url = @metadata._links.self.href
+		@_area_id_map = {}
+		for area in @metadata.dimensions.alue.categories
+			@_area_id_map[@constructor._get_area_id area.id] = area
+
+	get_reference_area: => @metadata.dimensions.alue.categories[0].id
+
+	get_area_label: (area_id) =>
+		category = @_area_id_map[area_id]
+		return category.label ? category.id
+
+class AluesarjatSimpleShareIndicator extends AluesarjatIndicator
+	@all_id: 'all'
+	@formatter: d3.format(".3p")
+	
+	get_year_data: (year=2014) =>
+		cls = @constructor
+		data_promise = $.getJSON "#{@base_url}filter&vuosi=#{year}/group_for_columns?as_values=#{cls.field_id},value"
+		data_promise.then (raw_data) ->
+			data = []
+			for grp in raw_data
+				field_row = grp[cls.field_id]
+				subset = parseFloat grp.value[field_row.indexOf(cls.subset_id)]
+				all = parseFloat grp.value[field_row.indexOf(cls.all_id)]
+				data.push [cls._get_area_id(grp.alue), subset/all]
+			return data: data
+	
+	get_timeseries_data: (areas) =>
+		areas = (@_area_id_map[a].id for a in areas)
+		cls = @constructor
+		valcols = "#{cls.field_id},value".split(',')
+		data_promise = $.getJSON "#{@base_url}filter&alue=#{areas.join ','}/group_for_columns?as_values=#{valcols.join ','}"
+		data_promise.then (raw_data) ->
+			datasets = ([] for area in areas)
+			d_idx = {}
+			for [area, d] in _.zip(areas, datasets)
+				d_idx[area] = d
+				
+			for grp in raw_data
+				field_row = grp[cls.field_id]
+				subset = parseFloat grp.value[field_row.indexOf(cls.subset_id)]
+				all = parseFloat grp.value[field_row.indexOf(cls.all_id)]
+				d_idx[grp.alue].push [parseInt(grp.vuosi), subset/all]
+				d_idx[grp.alue].area = cls._get_area_id grp.alue
+			
+			return datasets: datasets
+
+class WomenShare extends AluesarjatSimpleShareIndicator
+	@base_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01s_hki_vakiluku/filter&aidinkieli=all&sukupuoli=2,all&ika=99V/"
+	@field_id: "sukupuoli"
+	@subset_id: "2"
+	
+class ForeignShare extends AluesarjatSimpleShareIndicator
+	@base_url: "http://dev.hel.fi/stats/resources/aluesarjat_a03s_hki_vakiluku_aidinkieli/filter&aidinkieli=3,all/"
+	@field_id: "aidinkieli"
+	@subset_id: "3"
+
+GEOSERVER_BASE_URL = "http://geoserver.hel.fi/geoserver/"
+
+
+###
+mapel.powerTip
+	followMouse: true
+	manual: true
+
+$(statsmap).on "area-mouseover", (area_id, value) ->
+	mapel.data 'powertipjq', $("<div>#{value}</div>")
+	mapel.powerTip "show"
+
+$(statsmap).on "area-mouseout", ->
+	mapel.powerTip "hide"
+	# Without this the powertip won't change
+	# the contents.
+	$.powerTip.hide()
+###
+
+# Fetch the area polygons in GeoJSON format using WFS
+wfs_url = GEOSERVER_BASE_URL + "wfs/"
+request_parameters = {
+	# Specify the dataset to use
+	typeName: 'hel:osaalue'
+	# Standard WFS request parameters
+	srsName: 'EPSG:4326'
+	service: 'WFS'
+	version: '1.1.0'
+	request: 'GetFeature'
+	outputFormat: 'application/json'
+}
+
+request_options =
+		data: request_parameters
+polygons_promise = $.ajax wfs_url, request_options
+
+start_controller = (polygons, dataset) ->
+	ctrl = new _Controller(polygons, dataset)
+	ctrl.set_dataset dataset
+	.then =>
+		ctrl.statsmap.fit_data_bounds()
+		return ctrl
+
+autoscale_fix = (axis) ->
+	min = Infinity
+	max = -Infinity
+	for row in axis.chart._getAllData()
+		x = row[axis.measure]
+		min = Math.min x, min
+		max = Math.max x, max
+	
+	axis.overrideMin = min
+	axis.overrideMax = max
+
+class _Controller
+	constructor: (polygons, dataset) ->
+		@area_selection = []
+
+		mapstuff = hel_leaflet_map "map"
+		mapel = $("#map")
+		map = mapstuff.map
+		@statsmap = new StatsMap map,
+			legend_el: "#map_colormap_legend"
+		
+		@statsmap.set_polygons polygons, geojson_area_id
+		$(@statsmap).on "area-click", (e, area_id, value) =>
+			return if isNaN value
+			if @area_selection and @area_selection[0] == area_id
+				sel = []
+			else
+				sel = [area_id]
+
+			@set_area_selection sel
+
+		el = d3.select("#timeseries")
+		chart = new dimple.chart el, []
+		@y_axis = chart.addMeasureAxis('x', 'Vuosi')
+		@x_axis = chart.addMeasureAxis('y', 'value')
+
+		# Uglyuglyugly, see
+		# https://github.com/PMSI-AlignAlytics/dimple/issues/99
+		@x_axis._getFormat = => @dataset.formatter
+		@y_axis._getFormat = => (x) -> x
+
+		chart.addSeries(["Vuosi", "Alue"], dimple.plot.line)
+		chart.addLegend("0%", "20px", "100%", null, "right")
+		@timeseries = chart
+
+		
+	
+	set_dataset: (@dataset) =>
+		@dataset.New().then @_new_stats
+
+	_new_stats: (@stats) =>
+		@area_id_map = {}
+
+
+		$.when(@_update_area_stats(), @_update_timeseries()).then =>
+			@statsmap.render()
+	
+	set_area_selection: (selection) =>
+		@area_selection = selection
+		@_update_timeseries()
+
+	_update_area_stats: =>
+		p = @stats.get_year_data()
+		p.then (data) =>
+			@statsmap.set_data data.data, @dataset.formatter
+			
+	
+	_update_timeseries: =>
+		areas = [@stats.get_reference_area()].concat(@area_selection)
+		p = @stats.get_timeseries_data areas
+
+		is_invalid = (x) -> not x? or isNaN x
+		p.then (data) =>
+			entries = []
+			for rows in data.datasets
+				for [x, y] in rows
+					entry = {}
+					continue if is_invalid(x) or is_invalid(y)
+					entry["Vuosi"] = x
+					# Abstraction leakedileaks
+					entry["Alue"] = @stats.get_area_label rows.area
+					entry["value"] = y
+					entries.push entry
+			
+			@timeseries.data = entries
+			autoscale_fix @x_axis
+			autoscale_fix @y_axis
+			@timeseries.draw(300)
+			return undefined
+		
+
+polygons_promise
+.then (polygons) ->
+	start_controller polygons, WomenShare
+.then (controller) ->
+	setTimeout (-> controller.set_dataset ForeignShare), 1000
+	#.then ->
+	#	controller.set_dataset WomenShare
+
+</script>
