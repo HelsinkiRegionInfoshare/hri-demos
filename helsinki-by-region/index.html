@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <script type="text/javascript" src="../vendor/coffee-script.js"></script>
 <script type="text/javascript" src="../vendor/jquery-1.11.0.js"></script>
 <script type="text/javascript" src="../vendor/underscore.js"></script>
@@ -17,6 +18,9 @@
 
 <link rel="stylesheet" href="../vendor/jquery.powertip/jquery.powertip.css" />
 <script type="text/javascript" src="../vendor/jquery.powertip/jquery.powertip.js"></script>
+
+<script type="text/javascript" src="../vendor/chosen/chosen.jquery.js"></script>
+<link rel="stylesheet" href="../vendor/chosen/chosen.css" />
 
 <script type="text/coffeescript" src="statsmap.coffee"></script>
 <script type="text/coffeescript" src="blockhist.coffee"></script>
@@ -50,16 +54,25 @@ body, html {
 }
 
 svg * {
-	font-size: 16px !important;
+	font-size: 14px !important;
 }
 
 #histogram {
 	position: relative;
+	box-sizing: border-box;
+	display: flex;
+	padding-left: 80px;
 }
+
+#histogram .histogram_canvas {
+	border-bottom: 1px solid black;
+}
+
 #histogram .bin {
 	box-sizing: border-box;
 	border-left: 1px solid white;
 	border-bottom: 1px solid white;
+	cursor: pointer;
 }
 
 #histogram .selected-bin {
@@ -67,11 +80,21 @@ svg * {
 	z-index: 2;
 }
 
+#area_label, #variable_label {
+	font-size: 16px;
+}
+
+#variable_label .chosen-container {
+	width: 300px !important;
+	font-size: 16px !important;
+}
+
 </style>
 
-<!-- Yep, nested tables with inline non-css sizes.
-Life's too short for fighting with CSS. -->
-<table id="grid_container"><tr>
+<!-- Todo: get rid of this table mess -->
+<table id="grid_container">
+<tr height="0%"><td><h3 style="margin: 0; display: inline;"><span id="variable_label"></span> <span id="area_label"></span></h3></td></tr>
+<tr>
 
 <td><table>
 <tr height="100%"><td height="100%" width="50%" id="map"></td></tr>
@@ -88,14 +111,6 @@ Life's too short for fighting with CSS. -->
 
 
 <script type="text/coffeescript">
-
-blockhist =
-	stacked: true
-	grouped: false
-	supportedAxes: ['x', 'y']
-	draw: (chart, series, duration) =>
-		console.log "yay"
-
 
 geojson_area_id = (feature) -> parseInt feature.properties.tunnus
 
@@ -148,7 +163,21 @@ class AluesarjatSimpleShareIndicator extends AluesarjatIndicator
 	@all_id: 'all'
 	@formatter: d3.format(".3p")
 	
-	get_year_data: (year=2014) =>
+	get_reference_year: =>
+		current = new Date().getFullYear()
+		cats = @metadata.dimensions.vuosi.categories
+		for cat in cats
+			# TODO: HACK! There's an undefined for some reason
+			if not cat
+				continue
+			if cat.id == current
+				return cat
+		return cats[cats.length-1]
+
+	get_year_data: =>
+		year = @get_reference_year().id
+		if not year
+			asdfasdfasf
 		cls = @constructor
 		data_promise = $.getJSON "#{@base_url}filter&vuosi=#{year}/group_for_columns?as_values=#{cls.field_id},value"
 		data_promise.then (raw_data) =>
@@ -188,20 +217,36 @@ class WomenShare extends AluesarjatSimpleShareIndicator
 	@base_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01s_hki_vakiluku/filter&aidinkieli=all&sukupuoli=2,all&ika=99V/"
 	@field_id: "sukupuoli"
 	@subset_id: "2"
+	@title: "Naisten osuus"
 	
 class ForeignShare extends AluesarjatSimpleShareIndicator
 	@base_url: "http://dev.hel.fi/stats/resources/aluesarjat_a03s_hki_vakiluku_aidinkieli/filter&aidinkieli=3,all/"
 	@field_id: "aidinkieli"
 	@subset_id: "3"
+	@title: "Ulkomaankielisten osuus"
+
+class SingleShare extends AluesarjatSimpleShareIndicator
+	@base_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01s_hki_asuntokunnat/filter&henkiloluku=1,all/"
+	@field_id: "henkiloluku"
+	@subset_id: "1"
+	@title: "Yksinasuvien osuus"
+
+class BirthRate extends AluesarjatSimpleShareIndicator
+	@base_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/filter&ika=99V,00V/"
+	@field_id: "ika"
+	@subset_id: "00V"
+	@all_id: "99V"
+	@title: "Syntyvyys"
+	
+
+
+available_indicators = [WomenShare, ForeignShare, SingleShare, BirthRate]
 
 GEOSERVER_BASE_URL = "http://geoserver.hel.fi/geoserver/"
 
 
-###
-mapel.powerTip
-	followMouse: true
-	manual: true
 
+###
 $(statsmap).on "area-mouseover", (area_id, value) ->
 	mapel.data 'powertipjq', $("<div>#{value}</div>")
 	mapel.powerTip "show"
@@ -230,9 +275,9 @@ request_options =
 		data: request_parameters
 polygons_promise = $.ajax wfs_url, request_options
 
-start_controller = (polygons, dataset) ->
-	ctrl = new _Controller(polygons, dataset)
-	ctrl.set_dataset dataset
+start_controller = (polygons) ->
+	ctrl = new _Controller(polygons)
+	ctrl.set_dataset available_indicators[0]
 	.then =>
 		ctrl.statsmap.fit_data_bounds()
 		return ctrl
@@ -249,7 +294,18 @@ autoscale_fix = (axis) ->
 	axis.overrideMax = max
 
 class _Controller
-	constructor: (polygons, dataset) ->
+	constructor: (polygons) ->
+		dataset = available_indicators[0]
+		# Hack!
+		dropdown = $("<select>").appendTo $("#variable_label")
+		for ind, i in available_indicators
+			dropdown.append $ """
+			<option value="#{i}">#{ind.title}</option>
+			"""
+		dropdown.chosen()
+		dropdown.change =>
+			@set_dataset available_indicators[dropdown.val()]
+		
 		@area_selection = []
 
 		mapstuff = hel_leaflet_map "map"
@@ -284,7 +340,7 @@ class _Controller
 		chart.x_axis.ticks = 5
 		chart.y_axis = chart.addMeasureAxis('y', 'value')
 		chart.y_axis.ticks = 5
-		chart.setMargins 80, 0, 10, 60
+		chart.setMargins 80, 0, 20, 40
 		# Uglyuglyugly, see
 		# https://github.com/PMSI-AlignAlytics/dimple/issues/99
 		chart.y_axis._getFormat = => @dataset.formatter
@@ -303,6 +359,45 @@ class _Controller
 			@timeseries.draw 0, true
 		
 		
+		
+		@container_el = $("#grid_container")
+		@container_el.powerTip
+			followMouse: true
+			manual: true
+			closeDelay: 0
+			fadeOutTime: 0
+			fadeInTime: 0
+
+		
+		show_tooltip = (area_id, value) =>
+			area = @stats.get_area_label area_id
+			@container_el.data 'powertipjq', $(
+				"""
+				<dl>
+				<dt>#{area}</dt>
+				<dd>#{@stats.constructor.formatter value}</dd>
+				</dl>
+				"""
+				)
+			@container_el.powerTip "show"
+		
+		hide_tooltip = =>
+			@container_el.powerTip "hide"; $.powerTip.hide()
+		
+		$(@statsmap).on "area-mouseover", (e, area_id, value) =>
+			show_tooltip area_id, value
+
+		$(@statsmap).on "area-mouseout", ->
+			hide_tooltip()
+
+		@histogram.el.on "mouseover", ".bin", (e) =>
+			el = $ e.target
+			show_tooltip el.data("bin-label"), el.data("bin-value")
+
+		@histogram.el.on "mouseout", ".bin", ->
+			hide_tooltip()
+		
+		
 	
 	set_dataset: (@dataset) =>
 		@dataset.New().then @_new_stats
@@ -313,7 +408,11 @@ class _Controller
 		
 		$.when(@_update_area_stats(), @_update_timeseries()).then =>
 			@statsmap.render()
+			# TODO: Ugly hacks
 			@histogram.colormap = @statsmap.colormap
+			@histogram.formatter = @stats.constructor.formatter
+			for area in @area_selection
+				@histogram.el.find("[data-bin-label='#{area}']").addClass("selected-bin")
 			@histogram.draw()
 	
 	set_area_selection: (selection) =>
@@ -323,7 +422,6 @@ class _Controller
 		@histogram.el.find(".bin").removeClass("selected-bin")
 		for area in selection
 			@histogram.el.find("[data-bin-label='#{area}']").addClass("selected-bin")
-
 		@_update_timeseries()
 
 	_update_area_stats: =>
@@ -337,6 +435,8 @@ class _Controller
 	_update_timeseries: =>
 		@$timeseries_el.spin()
 		areas = [@stats.get_reference_area()].concat(@area_selection)
+		# Hack!
+		$("#area_label").text @stats.get_area_label areas[areas.length-1]
 		p = @stats.get_timeseries_data areas
 
 		is_invalid = (x) -> not x? or isNaN x
@@ -349,9 +449,10 @@ class _Controller
 					entry["Vuosi"] = x
 					# Abstraction leakedileaks
 					entry["Alue"] = @stats.get_area_label rows.area
-					entry["value"] = y
+					entry[@stats.constructor.title] = y
 					entries.push entry
 			
+			@timeseries.y_axis.measure = @stats.constructor.title
 			@timeseries.data = entries
 			autoscale_fix @timeseries.x_axis
 			autoscale_fix @timeseries.y_axis
@@ -361,7 +462,7 @@ class _Controller
 
 polygons_promise
 .then (polygons) ->
-	start_controller polygons, ForeignShare
+	start_controller polygons
 .then (controller) ->
 	#setTimeout (-> controller.set_dataset WomenShare), 1000
 

@@ -17,8 +17,19 @@ discretize = (bins, xy) ->
 
 class @BlockHist
 	constructor: (el) ->
-		@el = $(el)
+		@topel = $(el)
+		hack = $("""
+			<table>
+			<tr><td class="histogram_canvas" style="position: relative; width: 100%; height: 100%;"></td></tr>
+			<tr><td class="axis">
+			<div class="minval" style="float: left"/><div class="maxval" style="float: right"/>
+			</td></tr>
+			</table>
+			""").appendTo(@topel)
+		@el = hack.find(".histogram_canvas")
+		@axis = hack.find(".axis")
 		@colormap = (v) -> 'gray'
+		@formatter = (v) -> v
 	
 	set_data: (values, labels) =>
 		@data = _.zip values, labels
@@ -27,9 +38,7 @@ class @BlockHist
 
 	_add_element: (size, pos, entry) =>
 		p = (v) -> "#{v*100}%"
-		el = @el.find("[data-bin-label='#{entry[1]}']")
-		if el.length == 0
-			el = $("""<div class="bin"><div class="subbin"/></div>""").appendTo @el
+		el = $("""<div class="bin"><div class="subbin"/></div>""").appendTo @el
 
 		el.attr "data-bin-label", entry[1]
 		el.attr "data-bin-value", entry[0]
@@ -48,6 +57,8 @@ class @BlockHist
 		[x, y] = _.zip @data...
 		bins = freedman_diconis_bins x
 		disc = discretize bins, @data
+		@axis.find(".minval").text @formatter disc[0].y[0][0]
+		@axis.find(".maxval").text @formatter disc[disc.length-1].y[disc[disc.length-1].y.length-1][0]
 		max = Math.max (b.y.length for b in disc)...
 		binh = 1.0/max
 		binw = 1.0/disc.length
