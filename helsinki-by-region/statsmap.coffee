@@ -2,6 +2,7 @@ class @StatsMap
 	constructor: (@map, @opts={}) ->
 		#@layer = L.geoJson().addTo @map
 		@layer = null
+		@selection = []
 	
 	set_polygons: (@geojson, @getid) ->
 
@@ -10,10 +11,14 @@ class @StatsMap
 		for [k, v] in data
 			@data[k] = v
 	
-	render: (opts={}) ->
+	set_selection: (@selection) => @render()
+
+	render: =>
 		if @layer and @layer._data != @geojson
 			@map.removeLayer @layer
 			@layer = null
+		else if @layer and @layer.data == @data
+			@layer.setStyle @styler
 			
 		if not @data or not @geojson
 			return
@@ -37,15 +42,17 @@ class @StatsMap
 			new L.Point(max_value,120))
 
 		colorf = (val) -> value_to_color.evaluate val
+		@colormap = colorf
 
 		if @opts.legend_el
 			set_colormap_legend $(@opts.legend_el),
 				[min_value, max_value], colorf,
 				formatter: @value_formatter
 
-		styler = (polygon, args...) =>
+		@styler = (polygon) =>
 			# Get the value and force it in to the color mapping range
-			value = @data[@getid polygon]
+			id = @getid polygon
+			value = @data[id]
 			if value < min_value
 				value = min_value
 			if value > max_value
@@ -66,15 +73,15 @@ class @StatsMap
 				style.fillOpacity = 0.1
 			
 	
-			###
-			layer = @layers_by_area[polygon.properties.area_id]
-			
-			if area_selection[polygon.properties.raw_area]
+			if id in @selection
 				style.weight = 3
 				style.color = "black"
 				style.dashArray = ''
+				layer = @layers_by_area[id]
 				layer.bringToFront()
 			
+			
+			###
 			layer.on "mouseover", (e) =>
 				tooltip = @tooltip_func e.target.feature
 				return if not tooltip
@@ -91,20 +98,20 @@ class @StatsMap
 		
 		bounds = null
 		if not @layer
+			@layers_by_area = {}
 			@layer = L.geoJson @geojson,
-				style: styler
+				style: @styler
 				onEachFeature: (polygon, layer) =>
 					bind_area = (event) =>
 						layer.on event, (e) =>
 							id = @getid e.target.feature
-							console.log id, @data[id]
 							$(@).trigger("area-#{event}",
 								[id, @data[id], e])
 
 					for e in ['mouseover', 'mouseout', 'click']
-						console.log "Binding"
 						bind_area e
-					
+					@layers_by_area[@getid polygon] = layer
+
 					val = @data[@getid(polygon)]
 					if not val? or isNaN(val)
 						return
@@ -116,7 +123,7 @@ class @StatsMap
 			@layer.addTo @map
 			@layer._data = @geojson
 		else
-			@layer.setStyle styler
+			@layer.setStyle @styler
 		
 		@data_bounds = bounds
 	
