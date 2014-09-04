@@ -70,14 +70,26 @@ svg * {
 
 #histogram .bin {
 	box-sizing: border-box;
-	border-left: 1px solid white;
-	border-bottom: 1px solid white;
+	box-shadow: 0px 0px 0px 2px rgba(255, 255, 255, 0.5) inset;
 	cursor: pointer;
+	transition: all 1s ease-in-out;
+	transition: z-index 0s;
+	transition: box-shadow 0.5s;
+}
+
+#histogram .bin:hover {
+	box-shadow: 0px 0px 2px 4px rgba(255, 255, 255, 0.6);
+	z-index: 2;
+	transition: box-shadow 0.5s;
 }
 
 #histogram .selected-bin {
-	border: 3px solid black;
+	box-shadow: 0px 0px 1px 2px rgba(0, 0, 0, 0.75);
 	z-index: 2;
+}
+
+#histogram .selected-bin:hover {
+	box-shadow: 0px 0px 2px 4px rgba(50, 50, 50, 0.75);
 }
 
 #area_label, #variable_label {
