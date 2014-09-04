@@ -363,5 +363,6 @@ polygons_promise
 .then (polygons) ->
 	start_controller polygons, ForeignShare
 .then (controller) ->
+	#setTimeout (-> controller.set_dataset WomenShare), 1000
 
 </script>

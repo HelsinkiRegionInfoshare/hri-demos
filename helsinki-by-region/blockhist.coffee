@@ -27,17 +27,20 @@ class @BlockHist
 
 	_add_element: (size, pos, entry) =>
 		p = (v) -> "#{v*100}%"
-		el = $("""<div class="bin"><div class="subbin"/></div>""").appendTo @el
+		el = @el.find("[data-bin-label='#{entry[1]}']")
+		if el.length == 0
+			el = $("""<div class="bin"><div class="subbin"/></div>""").appendTo @el
+
+		el.attr "data-bin-label", entry[1]
+		el.attr "data-bin-value", entry[0]
 		style =
-			position: "absolute"
 			left: p pos[0]
 			bottom: p pos[1]
 			width: p size[0]
 			height: p size[1]
 			"background-color": @colormap entry[0]
+			position: "absolute"
 		el.css style
-		el.attr "data-bin-label", entry[1]
-		el.attr "data-bin-value", entry[1]
 		
 	
 	draw: =>
