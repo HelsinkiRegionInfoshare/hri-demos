@@ -141,7 +141,7 @@ class AluesarjatIndicator
 			return area_code
 	
 	@New: (args...) ->
-		$.getJSON(@base_url)
+		$.getJSON(@get_base_url())
 		.then (spec) =>
 			objectify_spec spec
 			self = new @(spec, args...)
@@ -162,9 +162,12 @@ class AluesarjatIndicator
 class AluesarjatSimpleShareIndicator extends AluesarjatIndicator
 	@all_id: 'all'
 	@formatter: d3.format(".3p")
+
+	@get_base_url: ->
+		return "#{@dataset_url}filter&#{@field_id}=#{@all_id},#{@subset_id}/"
 	
 	get_reference_year: =>
-		current = new Date().getFullYear()
+		current = "#{new Date().getFullYear()}"
 		cats = @metadata.dimensions.vuosi.categories
 		for cat in cats
 			# TODO: HACK! There's an undefined for some reason
@@ -179,7 +182,7 @@ class AluesarjatSimpleShareIndicator extends AluesarjatIndicator
 		if not year
 			asdfasdfasf
 		cls = @constructor
-		data_promise = $.getJSON "#{@base_url}filter&vuosi=#{year}/group_for_columns?as_values=#{cls.field_id},value"
+		data_promise = $.getJSON "#{cls.get_base_url()}filter&vuosi=#{year}/group_for_columns?as_values=#{cls.field_id},value"
 		data_promise.then (raw_data) =>
 			data = []
 			for grp in raw_data
@@ -197,7 +200,7 @@ class AluesarjatSimpleShareIndicator extends AluesarjatIndicator
 		areas = (@_area_id_map[a].id for a in areas)
 		cls = @constructor
 		valcols = "#{cls.field_id},value".split(',')
-		data_promise = $.getJSON "#{@base_url}filter&alue=#{areas.join ','}/group_for_columns?as_values=#{valcols.join ','}"
+		data_promise = $.getJSON "#{cls.get_base_url()}filter&alue=#{areas.join ','}/group_for_columns?as_values=#{valcols.join ','}"
 		data_promise.then (raw_data) ->
 			datasets = ([] for area in areas)
 			d_idx = {}
@@ -214,25 +217,25 @@ class AluesarjatSimpleShareIndicator extends AluesarjatIndicator
 			return datasets: datasets
 
 class WomenShare extends AluesarjatSimpleShareIndicator
-	@base_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01s_hki_vakiluku/filter&aidinkieli=all&sukupuoli=2,all&ika=99V/"
+	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01s_hki_vakiluku/filter&ika=99V&aidinkieli=all/"
 	@field_id: "sukupuoli"
 	@subset_id: "2"
 	@title: "Naisten osuus"
 	
 class ForeignShare extends AluesarjatSimpleShareIndicator
-	@base_url: "http://dev.hel.fi/stats/resources/aluesarjat_a03s_hki_vakiluku_aidinkieli/filter&aidinkieli=3,all/"
+	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a03s_hki_vakiluku_aidinkieli/"
 	@field_id: "aidinkieli"
 	@subset_id: "3"
 	@title: "Ulkomaankielisten osuus"
 
 class SingleShare extends AluesarjatSimpleShareIndicator
-	@base_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01s_hki_asuntokunnat/filter&henkiloluku=1,all/"
+	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01s_hki_asuntokunnat/"
 	@field_id: "henkiloluku"
 	@subset_id: "1"
 	@title: "Yksinasuvien osuus"
 
 class BirthRate extends AluesarjatSimpleShareIndicator
-	@base_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/filter&ika=99V,00V/"
+	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
 	@field_id: "ika"
 	@subset_id: "00V"
 	@all_id: "99V"
