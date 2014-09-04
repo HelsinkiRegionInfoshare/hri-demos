@@ -39,7 +39,8 @@ class @StatsMap
 		# Creates a green (highest) to red (lowest) colormap
 		value_to_color = new L.HSLHueFunction(
 			new L.Point(min_value,0),
-			new L.Point(max_value,120))
+			new L.Point(max_value,120),
+			outputSaturation: "75%")
 
 		colorf = (val) -> value_to_color.evaluate val
 		@colormap = colorf

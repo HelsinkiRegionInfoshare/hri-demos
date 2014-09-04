@@ -33,6 +33,7 @@ body, html {
 #map_colormap_legend {
 	margin: 0; padding: 0;
 	font-size: small;
+	display: none;
 }
 
 #grid_container {
@@ -57,9 +58,13 @@ svg * {
 }
 #histogram .bin {
 	box-sizing: border-box;
-	border-left: 2px solid white;
-	border-bottom: 2px solid white;
-	background-color: gray;
+	border-left: 1px solid white;
+	border-bottom: 1px solid white;
+}
+
+#histogram .selected-bin {
+	border: 3px solid black;
+	z-index: 2;
 }
 
 </style>
@@ -129,6 +134,7 @@ class AluesarjatIndicator
 	constructor: (@metadata) ->
 		@base_url = @metadata._links.self.href
 		@_area_id_map = {}
+		@area_filter = (area_id) -> true
 		for area in @metadata.dimensions.alue.categories
 			@_area_id_map[@constructor._get_area_id area.id] = area
 
@@ -145,13 +151,17 @@ class AluesarjatSimpleShareIndicator extends AluesarjatIndicator
 	get_year_data: (year=2014) =>
 		cls = @constructor
 		data_promise = $.getJSON "#{@base_url}filter&vuosi=#{year}/group_for_columns?as_values=#{cls.field_id},value"
-		data_promise.then (raw_data) ->
+		data_promise.then (raw_data) =>
 			data = []
 			for grp in raw_data
+				area_id = cls._get_area_id(grp.alue)
+				if not @area_filter area_id
+					continue
+
 				field_row = grp[cls.field_id]
 				subset = parseFloat grp.value[field_row.indexOf(cls.subset_id)]
 				all = parseFloat grp.value[field_row.indexOf(cls.all_id)]
-				data.push [cls._get_area_id(grp.alue), subset/all]
+				data.push [area_id, subset/all]
 			return data: data
 	
 	get_timeseries_data: (areas) =>
@@ -249,8 +259,14 @@ class _Controller
 			legend_el: "#map_colormap_legend"
 		
 		
+		shaped_areas = {}
+		for feature in polygons.features
+			shaped_areas[geojson_area_id feature] = true
+		@area_filter = (a) -> a of shaped_areas
+
 		@statsmap.set_polygons polygons, geojson_area_id
-		$(@statsmap).on "area-click", (e, area_id, value) =>
+		
+		toggle_area_selection = (area_id, value) =>
 			return if isNaN value
 			if @area_selection and @area_selection[0] == area_id
 				sel = []
@@ -259,6 +275,9 @@ class _Controller
 
 			@set_area_selection sel
 
+		$(@statsmap).on "area-click", (e, area_id, value) =>
+			toggle_area_selection area_id, value
+			
 		el = d3.select("#timeseries")
 		chart = new dimple.chart el, []
 		chart.x_axis = chart.addMeasureAxis('x', 'Vuosi')
@@ -275,6 +294,9 @@ class _Controller
 		@timeseries = chart
 		
 		@histogram = new BlockHist $("#histogram")
+		@histogram.el.on "click", ".bin", (e) ->
+			el = $ e.target
+			toggle_area_selection el.data("bin-label"), el.data("bin-value")
 		
 		@$timeseries_el = $("#timeseries_container")
 		$(window).resize =>
@@ -286,6 +308,7 @@ class _Controller
 		@dataset.New().then @_new_stats
 
 	_new_stats: (@stats) =>
+		@stats.area_filter = @area_filter
 		@area_id_map = {}
 		
 		$.when(@_update_area_stats(), @_update_timeseries()).then =>
@@ -296,6 +319,11 @@ class _Controller
 	set_area_selection: (selection) =>
 		@area_selection = selection
 		@statsmap.set_selection @area_selection
+		
+		@histogram.el.find(".bin").removeClass("selected-bin")
+		for area in selection
+			@histogram.el.find("[data-bin-label='#{area}']").addClass("selected-bin")
+
 		@_update_timeseries()
 
 	_update_area_stats: =>
@@ -333,7 +361,7 @@ class _Controller
 
 polygons_promise
 .then (polygons) ->
-	start_controller polygons, WomenShare
+	start_controller polygons, ForeignShare
 .then (controller) ->
 
 </script>

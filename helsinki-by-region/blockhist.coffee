@@ -1,6 +1,6 @@
 freedman_diconis_bins = (data) ->
 	iqr = d3.quantile(data, 0.75) - d3.quantile(data, 0.25)
-	h = 2*iqr/Math.pow(data.length, 1/3)
+	h = 0.75*iqr/Math.pow(data.length, 1/3)
 	range = data[data.length-1] - data[0]
 	nbins = Math.floor range/h
 	binw = range/nbins
@@ -36,6 +36,8 @@ class @BlockHist
 			height: p size[1]
 			"background-color": @colormap entry[0]
 		el.css style
+		el.attr "data-bin-label", entry[1]
+		el.attr "data-bin-value", entry[1]
 		
 	
 	draw: =>
