@@ -38,8 +38,13 @@ class @BlockHist
 
 	_add_element: (size, pos, entry) =>
 		p = (v) -> "#{v*100}%"
-		el = $("""<div class="bin"><div class="subbin"/></div>""").appendTo @el
-
+		
+		el = @_bin_cache[entry[1]]
+		if el
+			delete @_bin_cache[entry[1]]
+		else
+			el = $("""<div class="bin"><div class="subbin"/></div>""").appendTo @el
+		
 		el.attr "data-bin-label", entry[1]
 		el.attr "data-bin-value", entry[0]
 		style =
@@ -49,11 +54,21 @@ class @BlockHist
 			height: p size[1]
 			"background-color": @colormap entry[0]
 			position: "absolute"
+			transition: [
+				"width 0.25s ease-out 0s",
+				"height 0.25s ease-out 0s",
+				"left 0.5s ease-out 0s",
+				"bottom 0.5s ease-out 0s"
+				"background-color 0.1s linear #{0.5+pos[0]*0.5}s"
+				]
 		el.css style
 		
 	
 	draw: =>
-		@el.empty()
+		# TODO: Refresh selection
+		@_bin_cache = {}
+		for bin in @el.find('.bin')
+			@_bin_cache[$(bin).data "bin-label"] = $ bin
 		[x, y] = _.zip @data...
 		bins = freedman_diconis_bins x
 		disc = discretize bins, @data
@@ -68,4 +83,7 @@ class @BlockHist
 			for entry, yi in bin.y
 				y = yi * binh
 				@_add_element size, [x,y], entry
+
+		for key, bin of @_bin_cache
+			bin.remove()
 

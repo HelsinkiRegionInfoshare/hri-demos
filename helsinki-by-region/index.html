@@ -57,6 +57,11 @@ svg * {
 	font-size: 14px !important;
 }
 
+#map path {
+	transition: fill linear 1.0s;
+	transition: stroke linear 0.1s;
+}
+
 #histogram {
 	position: relative;
 	box-sizing: border-box;
@@ -69,27 +74,30 @@ svg * {
 }
 
 #histogram .bin {
+	left: 0;
+	right: 0;
+	background-color: rgba(255, 255, 255, 0.0)
 	box-sizing: border-box;
 	box-shadow: 0px 0px 0px 2px rgba(255, 255, 255, 0.5) inset;
 	cursor: pointer;
 	transition: all 1s ease-in-out;
 	transition: z-index 0s;
-	transition: box-shadow 0.5s;
+	transition: box-shadow 0s;
 }
 
 #histogram .bin:hover {
-	box-shadow: 0px 0px 2px 4px rgba(255, 255, 255, 0.6);
-	z-index: 2;
-	transition: box-shadow 0.5s;
+	box-shadow: 0px 0px 0px 2px rgba(255, 255, 255, 0.5) inset, 0px 0px 2px 4px rgba(255, 255, 255, 0.6);
+	z-index: 3;
 }
 
 #histogram .selected-bin {
-	box-shadow: 0px 0px 1px 2px rgba(0, 0, 0, 0.75);
+	box-shadow: 0px 0px 1px 2px rgba(0, 0, 0, 0.75), 0px 0px 0px 2px rgba(255, 255, 255, 0.5) inset;
 	z-index: 2;
 }
 
 #histogram .selected-bin:hover {
-	box-shadow: 0px 0px 2px 4px rgba(50, 50, 50, 0.75);
+	box-shadow: 0px 0px 2px 4px rgba(50, 50, 50, 0.75), 0px 0px 0px 2px rgba(255, 255, 255, 0.5) inset;
+	z-index: 3;
 }
 
 #area_label, #variable_label {
