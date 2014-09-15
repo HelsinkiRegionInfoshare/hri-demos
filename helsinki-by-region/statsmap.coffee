@@ -70,7 +70,7 @@ class @StatsMap
 				dashArray: '3'
 				weight: 1
 
-			if not value
+			if not value? or isNaN(value)
 				style.fillOpacity = 0.1
 			
 	

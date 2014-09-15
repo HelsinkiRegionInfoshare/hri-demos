@@ -78,7 +78,7 @@ svg * {
 	right: 0;
 	background-color: rgba(255, 255, 255, 0.0)
 	box-sizing: border-box;
-	box-shadow: 0px 0px 0px 2px rgba(255, 255, 255, 0.5) inset;
+	box-shadow: 0px 0px 0px 1px rgba(255, 255, 255, 0.5) inset;
 	cursor: pointer;
 	transition: all 1s ease-in-out;
 	transition: z-index 0s;
@@ -175,16 +175,11 @@ class AluesarjatIndicator
 
 	get_reference_area: => @metadata.dimensions.alue.categories[0].id
 
+	get_timeseries_areas: (areas) => areas.concat(@get_reference_area())
+
 	get_area_label: (area_id) =>
 		category = @_area_id_map[area_id]
 		return category.label ? category.id
-
-class AluesarjatSimpleShareIndicator extends AluesarjatIndicator
-	@all_id: 'all'
-	@formatter: d3.format(".3p")
-
-	@get_base_url: ->
-		return "#{@dataset_url}filter&#{@field_id}=#{@all_id},#{@subset_id}/"
 	
 	get_reference_year: =>
 		current = "#{new Date().getFullYear()}"
@@ -197,23 +192,28 @@ class AluesarjatSimpleShareIndicator extends AluesarjatIndicator
 				return cat
 		return cats[cats.length-1]
 
+class AluesarjatFunctionIndicator extends AluesarjatIndicator
+	@get_base_url: ->
+		return @dataset_url
+	
+	@get_func: -> @func
+	
 	get_year_data: =>
 		year = @get_reference_year().id
-		if not year
-			asdfasdfasf
 		cls = @constructor
 		data_promise = $.getJSON "#{cls.get_base_url()}filter&vuosi=#{year}/group_for_columns?as_values=#{cls.field_id},value"
 		data_promise.then (raw_data) =>
 			data = []
+			func = cls.get_func()
 			for grp in raw_data
 				area_id = cls._get_area_id(grp.alue)
-				if not @area_filter area_id
-					continue
-
+				continue if not @area_filter area_id
+				obj = {}
 				field_row = grp[cls.field_id]
-				subset = parseFloat grp.value[field_row.indexOf(cls.subset_id)]
-				all = parseFloat grp.value[field_row.indexOf(cls.all_id)]
-				data.push [area_id, subset/all]
+				for field_val, i in field_row
+					obj[field_val] = parseFloat grp.value[i]
+				data.push [area_id, func(obj)]
+			
 			return data: data
 	
 	get_timeseries_data: (areas) =>
@@ -222,6 +222,7 @@ class AluesarjatSimpleShareIndicator extends AluesarjatIndicator
 		valcols = "#{cls.field_id},value".split(',')
 		data_promise = $.getJSON "#{cls.get_base_url()}filter&alue=#{areas.join ','}/group_for_columns?as_values=#{valcols.join ','}"
 		data_promise.then (raw_data) ->
+			func = cls.get_func()
 			datasets = ([] for area in areas)
 			d_idx = {}
 			for [area, d] in _.zip(areas, datasets)
@@ -229,41 +230,128 @@ class AluesarjatSimpleShareIndicator extends AluesarjatIndicator
 				
 			for grp in raw_data
 				field_row = grp[cls.field_id]
-				subset = parseFloat grp.value[field_row.indexOf(cls.subset_id)]
-				all = parseFloat grp.value[field_row.indexOf(cls.all_id)]
-				d_idx[grp.alue].push [parseInt(grp.vuosi), subset/all]
+				obj = {}
+				for field_val, i in field_row
+					obj[field_val] = parseFloat grp.value[i]
+				
+				d_idx[grp.alue].push [parseInt(grp.vuosi), func(obj)]
 				d_idx[grp.alue].area = cls._get_area_id grp.alue
-			
+
 			return datasets: datasets
 
-class WomenShare extends AluesarjatSimpleShareIndicator
+
+
+class AluesarjatSimpleShareIndicator extends AluesarjatFunctionIndicator
+	@all_id: 'all'
+	@formatter: d3.format(".3p")
+
+	@get_func: -> (obj) => obj[@subset_id]/obj[@all_id]
+
+	@get_base_url: ->
+		return "#{@dataset_url}filter&#{@field_id}=#{@all_id},#{@subset_id}/"
+
+available_indicators = []
+
+ind = (cls) -> available_indicators.push cls
+
+ind class extends AluesarjatFunctionIndicator
+	@title: "Kouluikäisten (7-16v) osuus"
+	@formatter: d3.format(".3p")
+	@field_id: "ika"
+	@ages: ("#{d3.format("02d")(i)}V" for i in [7..16])
+	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
+	@func: (obj) =>
+		subset = 0
+		for age in @ages
+			subset += obj[age]
+		return subset/obj['99V']
+
+ind class extends AluesarjatFunctionIndicator
+	@title: "Kouluikäisiä"
+	
+	get_timeseries_areas: (areas) =>
+		if areas.length == 0
+			return [@get_reference_area()]
+		return areas
+	
+	@formatter: (v) -> "#{v} kpl"
+	@field_id: "ika"
+	@ages: ("#{d3.format("02d")(i)}V" for i in [7..16])
+	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
+	@func: (obj) =>
+		subset = 0
+		for age in @ages
+			subset += obj[age]
+		return subset
+
+ind class extends AluesarjatFunctionIndicator
+	@title: "Yli 65-vuotiaiden osuus"
+	@formatter: d3.format(".3p")
+	@field_id: "ika"
+	@ages: ("#{d3.format("02d")(i)}V" for i in [65..95] by 5)
+	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
+	@func: (obj) =>
+		subset = 0
+		for age in @ages
+			subset += obj[age]
+		return subset/obj['99V']
+
+ind class extends AluesarjatFunctionIndicator
+	@title: "Yli 65-vuotiaita"
+	
+	get_timeseries_areas: (areas) =>
+		if areas.length == 0
+			return [@get_reference_area()]
+		return areas
+	
+	@formatter: (v) -> "#{v} kpl"
+	@field_id: "ika"
+	@ages: ("#{d3.format("02d")(i)}V" for i in [65..95] by 5)
+	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
+	@func: (obj) =>
+		subset = 0
+		for age in @ages
+			subset += obj[age]
+		return subset
+
+ind class extends AluesarjatFunctionIndicator
+	@title: "Asukkaita yhteensä"
+	
+	get_timeseries_areas: (areas) =>
+		if areas.length == 0
+			return [@get_reference_area()]
+		return areas
+	
+	@formatter: (v) -> "#{v} kpl"
+	@field_id: "ika"
+	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
+	@func: (obj) => obj['99V']
+
+
+ind class extends AluesarjatSimpleShareIndicator
 	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01s_hki_vakiluku/filter&ika=99V&aidinkieli=all/"
 	@field_id: "sukupuoli"
 	@subset_id: "2"
 	@title: "Naisten osuus"
-	
-class ForeignShare extends AluesarjatSimpleShareIndicator
+
+ind class extends AluesarjatSimpleShareIndicator
 	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a03s_hki_vakiluku_aidinkieli/"
 	@field_id: "aidinkieli"
 	@subset_id: "3"
 	@title: "Ulkomaankielisten osuus"
 
-class SingleShare extends AluesarjatSimpleShareIndicator
+ind class extends AluesarjatSimpleShareIndicator
 	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01s_hki_asuntokunnat/"
 	@field_id: "henkiloluku"
 	@subset_id: "1"
 	@title: "Yksinasuvien osuus"
 
-class BirthRate extends AluesarjatSimpleShareIndicator
+ind class extends AluesarjatSimpleShareIndicator
 	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
 	@field_id: "ika"
 	@subset_id: "00V"
 	@all_id: "99V"
 	@title: "Syntyvyys"
-	
-
-
-available_indicators = [WomenShare, ForeignShare, SingleShare, BirthRate]
 
 GEOSERVER_BASE_URL = "http://geoserver.hel.fi/geoserver/"
 
@@ -285,7 +373,7 @@ $(statsmap).on "area-mouseout", ->
 wfs_url = GEOSERVER_BASE_URL + "wfs/"
 request_parameters = {
 	# Specify the dataset to use
-	typeName: 'hel:osaalue'
+	typeName: 'hel:osaalue_meri'
 	# Standard WFS request parameters
 	srsName: 'EPSG:4326'
 	service: 'WFS'
@@ -299,6 +387,7 @@ request_options =
 polygons_promise = $.ajax wfs_url, request_options
 
 start_controller = (polygons) ->
+	console.log polygons
 	ctrl = new _Controller(polygons)
 	ctrl.set_dataset available_indicators[0]
 	.then =>
@@ -457,8 +546,8 @@ class _Controller
 	
 	_update_timeseries: =>
 		@$timeseries_el.spin()
-		areas = [@stats.get_reference_area()].concat(@area_selection)
-		# Hack!
+		areas = @stats.get_timeseries_areas(@area_selection)
+
 		$("#area_label").text @stats.get_area_label areas[areas.length-1]
 		p = @stats.get_timeseries_data areas
 
