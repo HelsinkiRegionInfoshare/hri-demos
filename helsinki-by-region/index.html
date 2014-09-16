@@ -164,9 +164,24 @@ svg * {
 	z-index: 3;
 }
 
+#area_dropdown_chosen {
+	text-shadow: none;
+	width: 25px !important;
+}
+
+#area_dropdown_chosen .chosen-single > span {
+	display: none;
+}
+
+#area_dropdown_chosen .chosen-drop {
+	width: 200px;
+}
+
 </style>
 <div id="header" style="height: 30px;">
-<h1>Helsinki alueittain: <span id="area_label"></span> <span style="display: inline-block; position: absolute; right: 190px;" id="variable_label"></span></h1>
+<h1>Helsinki alueittain: <span id="area_label"></span>
+<select id="area_dropdown" style="display: hidden"></select>
+<span style="display: inline-block; position: absolute; right: 190px;" id="variable_label"></span></h1>
 </div>
 
 <div id="sidebar" style="margin: 0; padding: 0; position: absolute; width: 180px; top: 0; right: 0; height: 100%;">
@@ -231,6 +246,8 @@ class AluesarjatIndicator
 	get_reference_area: => @metadata.dimensions.alue.categories[0].id
 
 	get_timeseries_areas: (areas) => areas.concat(@get_reference_area())
+	
+	get_areas: => (k for k of @_area_id_map)
 
 	get_area_label: (area_id) =>
 		category = @_area_id_map[area_id]
@@ -529,7 +546,6 @@ class _Controller
 		
 
 	set_indicator: (@indicator) =>
-		
 		@indicator.New().then @_new_stats
 
 	_new_stats: (@stats) =>
@@ -553,6 +569,11 @@ class _Controller
 		for area in selection
 			@histogram.el.find("[data-bin-label='#{area}']").addClass("selected-bin")
 		@_update_timeseries()
+	
+	get_available_areas: =>
+		({id: a, label: @stats.get_area_label a} \
+		for a in @stats.get_areas() \
+		when @area_filter(a))
 
 	_update_area_stats: =>
 		$("#map_container, #histogram_container").spin()
@@ -606,19 +627,36 @@ setup = (polygons) ->
 		
 		areas = areas.map parseInt
 
-		dropdown.find('li').removeClass('selected')
-		$(dropdown.find("li[data-value='#{indicator_id}']")).addClass('selected')
+		variable_select.find('li').removeClass('selected')
+		$(variable_select.find("li[data-value='#{indicator_id}']")).addClass('selected')
 		$("#variable_label").text(indicator.title)
 
-		$.when do ->
-			if indicator != prev_indicator
-				prev_indicator = indicator
-				return ctrl.set_indicator(indicator)
-			else
+		# In case you wonder, the arguments are here
+		# so that we don't overwrite stuff from the parent
+		# context.
+		$.when do (el=null, areas=null) ->
+			return null if indicator == prev_indicator
+			prev_indicator = indicator
+			ctrl.set_indicator(indicator)
+			.then ->
+				el = $("#area_dropdown")
+				el.empty()
+				areas = ctrl.get_available_areas()
+				areas = areas.sort (a, b) ->
+					a.label.localeCompare b.label
+				for a in areas
+					el.append($("<option>")
+						.attr('value', a.id)
+						.text(a.label))
+				el.trigger("chosen:updated")
 				return null
+
 		.then ->
 			if JSON.stringify(areas) != JSON.stringify(prev_areas)
 				prev_areas = areas
+				$("#area_dropdown")
+				.val(areas[0])
+				.trigger("chosen:updated")
 				ctrl.set_area_selection(areas)
 	
 	set_state = (state) ->
@@ -639,14 +677,14 @@ setup = (polygons) ->
 	History.Adapter.bind window, "statechange", ->
 		set_state_only get_current_state()
 	
-	dropdown = $("<ul class='var_selector'>").appendTo $("#sidebar")
+	variable_select = $("<ul class='var_selector'>").appendTo $("#sidebar")
 	for id in available_indicators.__order
 		ind = available_indicators[id]
-		dropdown.append $ """
+		variable_select.append $ """
 		<li data-value="#{id}">#{ind.title}</option>
 		"""
 
-	dropdown.on "click", "li", (e) ->
+	variable_select.on "click", "li", (e) ->
 		update_state indicator: $(e.target).data("value")
 	
 	toggle_area_selection = (area_id, value) ->
@@ -663,9 +701,14 @@ setup = (polygons) ->
 	ctrl.histogram.el.on "click", ".bin", (e) ->
 		el = $ e.target
 		toggle_area_selection el.data("bin-label"), el.data("bin-value")
-		
+	
+	$("#area_dropdown").chosen()
+	$("#area_dropdown").change ->
+		update_state areas: [$(@).val()]
+
 	set_state_only($.deparam window.location.search[1..]).then ->
 		ctrl.statsmap.fit_data_bounds()
 
 polygons_promise.then setup
+###
 </script>
