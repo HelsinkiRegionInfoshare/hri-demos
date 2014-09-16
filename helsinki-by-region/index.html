@@ -439,18 +439,6 @@ GEOSERVER_BASE_URL = "http://geoserver.hel.fi/geoserver/"
 
 
 
-###
-$(statsmap).on "area-mouseover", (area_id, value) ->
-	mapel.data 'powertipjq', $("<div>#{value}</div>")
-	mapel.powerTip "show"
-
-$(statsmap).on "area-mouseout", ->
-	mapel.powerTip "hide"
-	# Without this the powertip won't change
-	# the contents.
-	$.powerTip.hide()
-###
-
 # Fetch the area polygons in GeoJSON format using WFS
 wfs_url = GEOSERVER_BASE_URL + "wfs/"
 request_parameters = {
@@ -523,7 +511,7 @@ class _Controller
 		
 		
 		
-		@container_el = $("#grid_container")
+		@container_el = $("body")
 		@container_el.powerTip
 			followMouse: true
 			manual: true
