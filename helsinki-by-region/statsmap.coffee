@@ -49,7 +49,7 @@ class @StatsMap
 			set_colormap_legend $(@opts.legend_el),
 				[min_value, max_value], colorf,
 				formatter: @value_formatter
-
+		
 		@styler = (polygon) =>
 			# Get the value and force it in to the color mapping range
 			id = @getid polygon
@@ -69,35 +69,30 @@ class @StatsMap
 				opacity: 1
 				dashArray: '3'
 				weight: 1
-
-			if not value? or isNaN(value)
-				style.fillOpacity = 0.1
-			
 	
+			layer = @layers_by_area[id]
 			if id in @selection
 				style.weight = 3
 				style.color = "black"
 				style.dashArray = ''
-				layer = @layers_by_area[id]
 				layer.bringToFront()
 			
+			if not value? or isNaN(value)
+				style.fillOpacity = 0.1
+				return style
 			
-			###
-			layer.on "mouseover", (e) =>
-				tooltip = @tooltip_func e.target.feature
-				return if not tooltip
-				@$el.data 'powertipjq', tooltip
-				@$el.powerTip "show"
+			if not layer
+				return style
 
-			layer.on "mouseout", (e) =>
-				@$el.powerTip "hide"
-				# Without this the powertip won't change
-				# the contents.
-				$.powerTip.hide()
-			###
+			if not @data_bounds
+				@data_bounds = layer.getBounds()
+			else
+				@data_bounds.extend(layer.getBounds())
+			
+			
 			return style
 		
-		bounds = null
+		@data_bounds = null
 		if not @layer
 			@layers_by_area = {}
 			@layer = L.geoJson @geojson,
@@ -113,22 +108,17 @@ class @StatsMap
 						bind_area e
 					@layers_by_area[@getid polygon] = layer
 
-					val = @data[@getid(polygon)]
-					if not val? or isNaN(val)
-						return
+
 	
-					if not bounds
-						bounds = layer.getBounds()
-					else
-						bounds.extend(layer.getBounds())
+
+			
 			@layer.addTo @map
 			@layer._data = @geojson
 		else
 			@layer.setStyle @styler
 		
-		@data_bounds = bounds
-	
 	fit_data_bounds: =>
+		return if not @data_bounds
 		@map.fitBounds @data_bounds
 		
 

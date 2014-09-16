@@ -1,6 +1,7 @@
 <meta charset="utf-8">
 <script type="text/javascript" src="../vendor/coffee-script.js"></script>
 <script type="text/javascript" src="../vendor/jquery-1.11.0.js"></script>
+<script type="text/javascript" src="../vendor/jquery-deparam.js"></script>
 <script type="text/javascript" src="../vendor/underscore.js"></script>
 
 <link rel="stylesheet" href="../vendor/leaflet.css" />
@@ -24,6 +25,8 @@
 
 <script type="text/coffeescript" src="statsmap.coffee"></script>
 <script type="text/coffeescript" src="blockhist.coffee"></script>
+
+<script type="text/javascript" src="../vendor/jquery.history.js"></script>
 
 <style type="text/css">
 #map_colormap_legend .colormap_scale {
@@ -180,26 +183,6 @@ svg * {
 <div id="timeseries_container" class="box-container" style="width: 50%; height: 50%; top: 50%; left: 50%">
 <svg id="timeseries"></svg>
 </div>
-
-
-<!--
-<table id="grid_container">
-<tr height="0%"><td><h3 style="margin: 0; display: inline;"><span id="variable_label"></span> <span id="area_label"></span></h3></td></tr>
-<tr>
-
-<td><table>
-<tr height="100%"><td height="100%" width="50%" id="map"></td></tr>
-<tr><td id="map_colormap_legend"></td></tr>
-</table></td>
-
-<td width="50%" id="timeseries_container">
- <table>
- <tr><td height="50%"><div id="histogram" style="width: 100%; height: 100%"></div></td></tr>
- <tr><td height="50%"><svg id="timeseries" style="width: 100%; height: 100%"></svg></td></tr>
-</td>
-
-</tr></table>
--->
 
 <script type="text/coffeescript">
 
@@ -483,13 +466,6 @@ request_options =
 		data: request_parameters
 polygons_promise = $.ajax wfs_url, request_options
 
-start_controller = (polygons) ->
-	ctrl = new _Controller(polygons)
-	ctrl.set_dataset available_indicators[0]
-	.then =>
-		ctrl.statsmap.fit_data_bounds()
-		return ctrl
-
 autoscale_fix = (axis) ->
 	min = Infinity
 	max = -Infinity
@@ -503,19 +479,7 @@ autoscale_fix = (axis) ->
 
 class _Controller
 	constructor: (polygons) ->
-		# Hack!
-		dropdown = $("<ul class='var_selector'>").appendTo $("#sidebar")
-		for ind, i in available_indicators
-			dropdown.append $ """
-			<li data-value="#{i}">#{ind.title}</option>
-			"""
-
-		dropdown.on "click", "li", (e) =>
-			dataset = available_indicators[$(e.target).data("value")]
-			@set_dataset dataset
-
-		@variable_dropdown = dropdown
-		
+				
 		@area_selection = []
 
 		mapstuff = hel_leaflet_map "map"
@@ -532,17 +496,7 @@ class _Controller
 
 		@statsmap.set_polygons polygons, geojson_area_id
 		
-		toggle_area_selection = (area_id, value) =>
-			return if isNaN value
-			if @area_selection and @area_selection[0] == area_id
-				sel = []
-			else
-				sel = [area_id]
 
-			@set_area_selection sel
-
-		$(@statsmap).on "area-click", (e, area_id, value) =>
-			toggle_area_selection area_id, value
 			
 		el = d3.select("#timeseries")
 		chart = new dimple.chart el, []
@@ -560,9 +514,6 @@ class _Controller
 		@timeseries = chart
 		
 		@histogram = new BlockHist $("#histogram")
-		@histogram.el.on "click", ".bin", (e) ->
-			el = $ e.target
-			toggle_area_selection el.data("bin-label"), el.data("bin-value")
 		
 		@$timeseries_el = $("#timeseries_container")
 		$(window).resize =>
@@ -608,16 +559,8 @@ class _Controller
 			hide_tooltip()
 		
 
-		@set_dataset(available_indicators[0])
-		
-		
-	
 	set_dataset: (@dataset) =>
-		@variable_dropdown.find('li').removeClass('selected')
-		# OMG! Use some kind of id!
-		i = available_indicators.indexOf(@dataset)
-		$(@variable_dropdown.find('li')[i]).addClass('selected')
-		$("#variable_label").text(dataset.title)
+		
 		@dataset.New().then @_new_stats
 
 	_new_stats: (@stats) =>
@@ -679,10 +622,79 @@ class _Controller
 			@timeseries.draw(300)
 		
 
-polygons_promise
-.then (polygons) ->
-	start_controller polygons
-.then (controller) ->
-	#setTimeout (-> controller.set_dataset WomenShare), 1000
+setup = (polygons) ->
+	ctrl = new _Controller(polygons)
+	
+	get_current_state = ->
+		$.deparam window.location.search[1..]
+	
+	prev_dataset = null
+	prev_areas = null
+	set_state_only = (state) ->
+		dataset = available_indicators[state.dataset ? 0]
+		areas = state.areas ? []
+		
+		areas = areas.map parseInt
 
+		dropdown.find('li').removeClass('selected')
+		# OMG! Use some kind of id!
+		i = available_indicators.indexOf(dataset)
+		$(dropdown.find('li')[i]).addClass('selected')
+		$("#variable_label").text(dataset.title)
+
+		$.when do ->
+			if dataset != prev_dataset
+				prev_dataset = dataset
+				return ctrl.set_dataset(dataset)
+			else
+				return null
+		.then ->
+			if JSON.stringify(areas) != JSON.stringify(prev_areas)
+				prev_areas = areas
+				ctrl.set_area_selection(areas)
+	
+	set_state = (state) ->
+		History.replaceState null, null, "?" + $.param state
+		set_state_only state
+	
+	
+	update_state = (newstuff) ->
+		state = $.extend get_current_state(), newstuff
+		set_state state
+
+	History.Adapter.bind window, "statechange", ->
+		set_state_only get_current_state()
+	
+	dropdown = $("<ul class='var_selector'>").appendTo $("#sidebar")
+	for ind, i in available_indicators
+		dropdown.append $ """
+		<li data-value="#{i}">#{ind.title}</option>
+		"""
+
+	dropdown.on "click", "li", (e) ->
+		update_state dataset: $(e.target).data("value")
+	
+		
+	toggle_area_selection = (area_id, value) ->
+		return if isNaN value
+		if ctrl.area_selection and ctrl.area_selection[0] == area_id
+			sel = []
+		else
+			sel = [area_id]
+		update_state areas: sel
+
+	$(ctrl.statsmap).on "area-click", (e, area_id, value) ->
+		toggle_area_selection area_id, value
+	
+	ctrl.histogram.el.on "click", ".bin", (e) ->
+		el = $ e.target
+		toggle_area_selection el.data("bin-label"), el.data("bin-value")
+		
+
+
+	
+	set_state($.deparam window.location.search[1..]).then ->
+		ctrl.statsmap.fit_data_bounds()
+
+polygons_promise.then setup
 </script>
