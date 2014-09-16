@@ -25,6 +25,7 @@
 
 <script type="text/coffeescript" src="statsmap.coffee"></script>
 <script type="text/coffeescript" src="blockhist.coffee"></script>
+<!--<script type="text/coffeescript" src="blockcdf.coffee"></script>-->
 
 <script type="text/javascript" src="../vendor/jquery.history.js"></script>
 
@@ -237,8 +238,13 @@ class AluesarjatIndicator
 			return category.id
 
 		# Hack++
-		parts = category.label.split(' ', 3)
-		return parts[parts.length-1]
+		# Why can't we have Python's split!?!
+		parts = category.label.split(' ')
+		if parts.length == 0
+			return parts[0]
+		if parts.length == 2
+			return parts[1]
+		return parts[2..].join(" ")
 	
 	get_reference_year: =>
 		current = "#{new Date().getFullYear()}"
