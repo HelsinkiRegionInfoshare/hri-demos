@@ -259,7 +259,7 @@ class AluesarjatIndicator
 
 class AluesarjatFunctionIndicator extends AluesarjatIndicator
 	@get_base_url: ->
-		return @dataset_url
+		return @indicator_url
 	
 	@get_func: -> @func
 	
@@ -288,9 +288,9 @@ class AluesarjatFunctionIndicator extends AluesarjatIndicator
 		data_promise = $.getJSON "#{cls.get_base_url()}filter&alue=#{areas.join ','}/group_for_columns?as_values=#{valcols.join ','}"
 		data_promise.then (raw_data) ->
 			func = cls.get_func()
-			datasets = ([] for area in areas)
+			indicators = ([] for area in areas)
 			d_idx = {}
-			for [area, d] in _.zip(areas, datasets)
+			for [area, d] in _.zip(areas, indicators)
 				d_idx[area] = d
 				
 			for grp in raw_data
@@ -302,7 +302,7 @@ class AluesarjatFunctionIndicator extends AluesarjatIndicator
 				d_idx[grp.alue].push [parseInt(grp.vuosi), func(obj)]
 				d_idx[grp.alue].area = cls._get_area_id grp.alue
 
-			return datasets: datasets
+			return indicators: indicators
 
 valid_share = (nom, denom) =>
 	if denom < 1
@@ -318,7 +318,7 @@ class AluesarjatSimpleShareIndicator extends AluesarjatFunctionIndicator
 		valid_share obj[@subset_id], obj[@all_id]
 
 	@get_base_url: ->
-		return "#{@dataset_url}filter&#{@field_id}=#{@all_id},#{@subset_id}/"
+		return "#{@indicator_url}filter&#{@field_id}=#{@all_id},#{@subset_id}/"
 
 available_indicators = {}
 available_indicators.__order = []
@@ -333,7 +333,7 @@ ind "7-16y_share", class extends AluesarjatFunctionIndicator
 	@formatter: d3.format(".3p")
 	@field_id: "ika"
 	@ages: ("#{d3.format("02d")(i)}V" for i in [7..16])
-	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
+	@indicator_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
 	@func: (obj) =>
 		subset = 0
 		for age in @ages
@@ -345,7 +345,7 @@ ind "0-6y_share", class extends AluesarjatFunctionIndicator
 	@formatter: d3.format(".3p")
 	@field_id: "ika"
 	@ages: ("#{d3.format("02d")(i)}V" for i in [0..6])
-	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
+	@indicator_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
 	@func: (obj) =>
 		subset = 0
 		for age in @ages
@@ -357,7 +357,7 @@ ind "65-y_share", class extends AluesarjatFunctionIndicator
 	@formatter: d3.format(".3p")
 	@field_id: "ika"
 	@ages: ("#{d3.format("02d")(i)}V" for i in [65..95] by 5)
-	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
+	@indicator_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
 	@func: (obj) =>
 		subset = 0
 		for age in @ages
@@ -373,30 +373,30 @@ ind "population_total", class extends AluesarjatFunctionIndicator
 	
 	@formatter: d3.format('d')
 	@field_id: "ika"
-	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
+	@indicator_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
 	@func: (obj) => obj['99V']
 
 
 ind "women_share", class extends AluesarjatSimpleShareIndicator
-	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01s_hki_vakiluku/filter&ika=99V&aidinkieli=all/"
+	@indicator_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01s_hki_vakiluku/filter&ika=99V&aidinkieli=all/"
 	@field_id: "sukupuoli"
 	@subset_id: "2"
 	@title: "Naisten osuus"
 
 ind "foreign_lang_share", class extends AluesarjatSimpleShareIndicator
-	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a03s_hki_vakiluku_aidinkieli/"
+	@indicator_url: "http://dev.hel.fi/stats/resources/aluesarjat_a03s_hki_vakiluku_aidinkieli/"
 	@field_id: "aidinkieli"
 	@subset_id: "3"
 	@title: "Ulkomaankielisten osuus"
 
 ind "single_share", class extends AluesarjatSimpleShareIndicator
-	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01s_hki_asuntokunnat/"
+	@indicator_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01s_hki_asuntokunnat/"
 	@field_id: "henkiloluku"
 	@subset_id: "1"
 	@title: "Yksinasuvien osuus"
 
 ind "birth_rate", class extends AluesarjatSimpleShareIndicator
-	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
+	@indicator_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
 	@field_id: "ika"
 	@subset_id: "00V"
 	@all_id: "99V"
@@ -421,7 +421,7 @@ $(statsmap).on "area-mouseout", ->
 # Fetch the area polygons in GeoJSON format using WFS
 wfs_url = GEOSERVER_BASE_URL + "wfs/"
 request_parameters = {
-	# Specify the dataset to use
+	# Specify the indicator to use
 	typeName: 'hel:osaalue_meri'
 	# Standard WFS request parameters
 	srsName: 'EPSG:4326'
@@ -476,7 +476,7 @@ class _Controller
 		chart.setMargins 60, 10, 30, 60
 		# Uglyuglyugly, see
 		# https://github.com/PMSI-AlignAlytics/dimple/issues/99
-		#chart.y_axis._getFormat = => @dataset.formatter
+		#chart.y_axis._getFormat = => @indicator.formatter
 		chart.x_axis._getFormat = => (x) -> x
 		chart.addSeries(["Vuosi", "Alue"], dimple.plot.line)
 		chart.addLegend("0%", "10px", "100%", null, "right")
@@ -528,9 +528,9 @@ class _Controller
 			hide_tooltip()
 		
 
-	set_dataset: (@dataset) =>
+	set_indicator: (@indicator) =>
 		
-		@dataset.New().then @_new_stats
+		@indicator.New().then @_new_stats
 
 	_new_stats: (@stats) =>
 		@stats.area_filter = @area_filter
@@ -558,7 +558,7 @@ class _Controller
 		$("#map_container, #histogram_container").spin()
 		p = @stats.get_year_data()
 		p.then (data) =>
-			@statsmap.set_data data.data, @dataset.formatter
+			@statsmap.set_data data.data, @indicator.formatter
 			[areas, values] = _.zip data.data...
 			@histogram.set_data values, areas
 			$("#map_container, #histogram_container").spin(false)
@@ -573,7 +573,7 @@ class _Controller
 		is_invalid = (x) -> not x? or isNaN x
 		p.then (data) =>
 			entries = []
-			for rows in data.datasets
+			for rows in data.indicators
 				for [x, y] in rows
 					entry = {}
 					continue if is_invalid(x) or is_invalid(y)
@@ -597,23 +597,23 @@ setup = (polygons) ->
 	get_current_state = ->
 		$.deparam window.location.search[1..]
 	
-	prev_dataset = null
+	prev_indicator = null
 	prev_areas = null
 	set_state_only = (state) ->
-		dataset_id = state.dataset ? available_indicators.__order[0]
-		dataset = available_indicators[dataset_id]
+		indicator_id = state.indicator ? available_indicators.__order[0]
+		indicator = available_indicators[indicator_id]
 		areas = state.areas ? []
 		
 		areas = areas.map parseInt
 
 		dropdown.find('li').removeClass('selected')
-		$(dropdown.find("li[data-value='#{dataset_id}']")).addClass('selected')
-		$("#variable_label").text(dataset.title)
+		$(dropdown.find("li[data-value='#{indicator_id}']")).addClass('selected')
+		$("#variable_label").text(indicator.title)
 
 		$.when do ->
-			if dataset != prev_dataset
-				prev_dataset = dataset
-				return ctrl.set_dataset(dataset)
+			if indicator != prev_indicator
+				prev_indicator = indicator
+				return ctrl.set_indicator(indicator)
 			else
 				return null
 		.then ->
@@ -622,7 +622,13 @@ setup = (polygons) ->
 				ctrl.set_area_selection(areas)
 	
 	set_state = (state) ->
-		History.replaceState null, null, "?" + $.param state
+		oldstate = get_current_state()
+		if JSON.stringify(oldstate) == JSON.stringify(state)
+			return $.Deferred().resolve()
+		state_str = $.param state
+		if state_str != ""
+			state_str = "?" + state_str
+		History.replaceState null, null, state_str
 		set_state_only state
 	
 	
@@ -641,9 +647,8 @@ setup = (polygons) ->
 		"""
 
 	dropdown.on "click", "li", (e) ->
-		update_state dataset: $(e.target).data("value")
+		update_state indicator: $(e.target).data("value")
 	
-		
 	toggle_area_selection = (area_id, value) ->
 		return if isNaN value
 		if ctrl.area_selection and ctrl.area_selection[0] == area_id
@@ -659,10 +664,7 @@ setup = (polygons) ->
 		el = $ e.target
 		toggle_area_selection el.data("bin-label"), el.data("bin-value")
 		
-
-
-	
-	set_state($.deparam window.location.search[1..]).then ->
+	set_state_only($.deparam window.location.search[1..]).then ->
 		ctrl.statsmap.fit_data_bounds()
 
 polygons_promise.then setup
