@@ -162,7 +162,7 @@ svg * {
 
 </style>
 <div id="header" style="height: 30px;">
-<h1>Helsinki alueittain: <span id="area_label"></span>, <span id="variable_label"></span></h1>
+<h1>Helsinki alueittain: <span id="area_label"></span> <span style="display: inline-block; position: absolute; right: 190px;" id="variable_label"></span></h1>
 </div>
 
 <div id="sidebar" style="margin: 0; padding: 0; position: absolute; width: 180px; top: 0; right: 0; height: 100%;">
@@ -250,7 +250,12 @@ class AluesarjatIndicator
 
 	get_area_label: (area_id) =>
 		category = @_area_id_map[area_id]
-		return category.label ? category.id
+		if not category.label?
+			return category.id
+
+		# Hack++
+		parts = category.label.split(' ', 3)
+		return parts[parts.length-1]
 	
 	get_reference_year: =>
 		current = "#{new Date().getFullYear()}"
@@ -545,7 +550,7 @@ class _Controller
 		chart.x_axis.ticks = 5
 		chart.y_axis = chart.addMeasureAxis('y', 'value')
 		chart.y_axis.ticks = 5
-		chart.setMargins 80, 0, 20, 40
+		chart.setMargins 60, 10, 30, 60
 		# Uglyuglyugly, see
 		# https://github.com/PMSI-AlignAlytics/dimple/issues/99
 		#chart.y_axis._getFormat = => @dataset.formatter
