@@ -314,11 +314,15 @@ class AluesarjatSimpleShareIndicator extends AluesarjatFunctionIndicator
 	@get_base_url: ->
 		return "#{@dataset_url}filter&#{@field_id}=#{@all_id},#{@subset_id}/"
 
-available_indicators = []
+available_indicators = {}
+available_indicators.__order = []
 
-ind = (cls) -> available_indicators.push cls
+ind = (id, cls) ->
+	available_indicators[id] = cls
+	available_indicators.__order.push id
+	cls.id = id
 
-ind class extends AluesarjatFunctionIndicator
+ind "7-16y_share", class extends AluesarjatFunctionIndicator
 	@title: "Kouluikäisten (7-16v) osuus"
 	@formatter: d3.format(".3p")
 	@field_id: "ika"
@@ -330,7 +334,7 @@ ind class extends AluesarjatFunctionIndicator
 			subset += obj[age]
 		return valid_share subset, obj['99V']
 
-ind class extends AluesarjatFunctionIndicator
+ind "0-6y_share", class extends AluesarjatFunctionIndicator
 	@title: "Alle kouluikäisten (0-6v) osuus"
 	@formatter: d3.format(".3p")
 	@field_id: "ika"
@@ -342,27 +346,7 @@ ind class extends AluesarjatFunctionIndicator
 			subset += obj[age]
 		return valid_share subset, obj['99V']
 
-###
-ind class extends AluesarjatFunctionIndicator
-	@title: "Kouluikäisiä"
-	
-	get_timeseries_areas: (areas) =>
-		if areas.length == 0
-			return [@get_reference_area()]
-		return areas
-	
-	@formatter: d3.format('d')
-	@field_id: "ika"
-	@ages: ("#{d3.format("02d")(i)}V" for i in [7..16])
-	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
-	@func: (obj) =>
-		subset = 0
-		for age in @ages
-			subset += obj[age]
-		return subset
-###
-
-ind class extends AluesarjatFunctionIndicator
+ind "65-y_share", class extends AluesarjatFunctionIndicator
 	@title: "Yli 65-vuotiaiden osuus"
 	@formatter: d3.format(".3p")
 	@field_id: "ika"
@@ -374,29 +358,8 @@ ind class extends AluesarjatFunctionIndicator
 			subset += obj[age]
 		return valid_share subset, obj['99V']
 
-###
-ind class extends AluesarjatFunctionIndicator
-	@title: "Yli 65-vuotiaita"
-	
-	get_timeseries_areas: (areas) =>
-		if areas.length == 0
-			return [@get_reference_area()]
-		return areas
-	
-	@formatter: d3.format('d')
-	@field_id: "ika"
-	@ages: ("#{d3.format("02d")(i)}V" for i in [65..95] by 5)
-	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
-	@func: (obj) =>
-		subset = 0
-		for age in @ages
-			subset += obj[age]
-		return subset
-###
-
-ind class extends AluesarjatFunctionIndicator
+ind "population_total", class extends AluesarjatFunctionIndicator
 	@title: "Asukkaita yhteensä"
-	
 	get_timeseries_areas: (areas) =>
 		if areas.length == 0
 			return [@get_reference_area()]
@@ -408,25 +371,25 @@ ind class extends AluesarjatFunctionIndicator
 	@func: (obj) => obj['99V']
 
 
-ind class extends AluesarjatSimpleShareIndicator
+ind "women_share", class extends AluesarjatSimpleShareIndicator
 	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01s_hki_vakiluku/filter&ika=99V&aidinkieli=all/"
 	@field_id: "sukupuoli"
 	@subset_id: "2"
 	@title: "Naisten osuus"
 
-ind class extends AluesarjatSimpleShareIndicator
+ind "foreign_lang_share", class extends AluesarjatSimpleShareIndicator
 	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a03s_hki_vakiluku_aidinkieli/"
 	@field_id: "aidinkieli"
 	@subset_id: "3"
 	@title: "Ulkomaankielisten osuus"
 
-ind class extends AluesarjatSimpleShareIndicator
+ind "single_share", class extends AluesarjatSimpleShareIndicator
 	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01s_hki_asuntokunnat/"
 	@field_id: "henkiloluku"
 	@subset_id: "1"
 	@title: "Yksinasuvien osuus"
 
-ind class extends AluesarjatSimpleShareIndicator
+ind "birth_rate", class extends AluesarjatSimpleShareIndicator
 	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
 	@field_id: "ika"
 	@subset_id: "00V"
@@ -631,15 +594,14 @@ setup = (polygons) ->
 	prev_dataset = null
 	prev_areas = null
 	set_state_only = (state) ->
-		dataset = available_indicators[state.dataset ? 0]
+		dataset_id = state.dataset ? available_indicators.__order[0]
+		dataset = available_indicators[dataset_id]
 		areas = state.areas ? []
 		
 		areas = areas.map parseInt
 
 		dropdown.find('li').removeClass('selected')
-		# OMG! Use some kind of id!
-		i = available_indicators.indexOf(dataset)
-		$(dropdown.find('li')[i]).addClass('selected')
+		$(dropdown.find("li[data-value='#{dataset_id}']")).addClass('selected')
 		$("#variable_label").text(dataset.title)
 
 		$.when do ->
@@ -666,9 +628,10 @@ setup = (polygons) ->
 		set_state_only get_current_state()
 	
 	dropdown = $("<ul class='var_selector'>").appendTo $("#sidebar")
-	for ind, i in available_indicators
+	for id in available_indicators.__order
+		ind = available_indicators[id]
 		dropdown.append $ """
-		<li data-value="#{i}">#{ind.title}</option>
+		<li data-value="#{id}">#{ind.title}</option>
 		"""
 
 	dropdown.on "click", "li", (e) ->
