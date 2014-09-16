@@ -39,11 +39,22 @@
     src: url(sansation_light.woff);
 }*/
 
-body, html {
+body, html, #loadingscreen {
 	margin: 0; padding: 0;
 	background-color: #eee;
 	font-family: "DroidSans",sans-serif;
 	color: #555;
+}
+
+#loadingscreen {
+	position: absolute;
+	width: 100%;
+	height: 100%;
+	z-index: 2000000001;
+}
+
+#loadingscreen .spinner {
+	z-index: 2000000002;
 }
 
 
@@ -178,6 +189,12 @@ svg * {
 }
 
 </style>
+<div id="loadingscreen">
+<script type="text/javascript">
+$("#loadingscreen").spin();
+</script>
+</div>
+
 <div id="header" style="height: 30px;">
 <h1>Helsinki alueittain: <span id="area_label"></span>
 <select id="area_dropdown" style="display: hidden"></select>
@@ -490,7 +507,7 @@ class _Controller
 		chart.x_axis.ticks = 5
 		chart.y_axis = chart.addMeasureAxis('y', 'value')
 		chart.y_axis.ticks = 5
-		chart.setMargins 60, 10, 30, 60
+		chart.setMargins 70, 10, 30, 60
 		# Uglyuglyugly, see
 		# https://github.com/PMSI-AlignAlytics/dimple/issues/99
 		#chart.y_axis._getFormat = => @indicator.formatter
@@ -608,6 +625,7 @@ class _Controller
 			@timeseries.data = entries
 			autoscale_fix @timeseries.x_axis
 			autoscale_fix @timeseries.y_axis
+			@timeseries.y_axis._getFormat = => @indicator.formatter
 			@$timeseries_el.spin(false)
 			@timeseries.draw(300)
 		
@@ -708,6 +726,10 @@ setup = (polygons) ->
 
 	set_state_only($.deparam window.location.search[1..]).then ->
 		ctrl.statsmap.fit_data_bounds()
+		$("#loadingscreen")
+		.delay(200)
+		.spin(false)
+		.fadeOut(1000)
 
 polygons_promise.then setup
 ###
