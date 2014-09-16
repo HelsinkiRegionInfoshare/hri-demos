@@ -46,7 +46,8 @@ class @BlockHist
 			el = $("""<div class="bin"><div class="subbin"/></div>""").appendTo @el
 		
 		el.attr "data-bin-label", entry[1]
-		el.attr "data-bin-value", entry[0]
+		el.data "bin-label", entry[1]
+		el.data "bin-value", entry[0]
 		style =
 			left: p pos[0]
 			bottom: p pos[1]

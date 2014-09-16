@@ -30,27 +30,90 @@
 	padding: 0; margin: 0;
 }
 
+/*@font-face {
+    font-family: "Droid Sans";
+    src: url(sansation_light.woff);
+}*/
+
 body, html {
 	margin: 0; padding: 0;
+	background-color: #eee;
+	font-family: "DroidSans",sans-serif;
+	color: #555;
 }
 
-#map_colormap_legend {
-	margin: 0; padding: 0;
-	font-size: small;
-	display: none;
+
+#header {
+	padding: 0px;
+}
+
+#header h1 {
+	padding-left: 10px;
+	padding-top: 7px;
+	font-size: 20px;
+	text-shadow: -1px 2px 0px #ccc;
+}
+
+#header h1 span {
+	font-size: 20px;
+}
+
+.var_selector {
+	display: block;
+	position: relative;
+	top: 0; width: 100%; right: 0;
+	max-height: 100%;
+	margin: 0;
+	padding: 0;
+	padding-right: 1px;
+	padding-left: 10px;
+	padding: 5px;
+	box-sizing: border-box;
+	overflow-x: visible;
+	overflow-y: auto;
+}
+
+.var_selector > li {
+	text-shadow: -1px 1px 0px #ccc;
+	display: block;
+	width: 100%; height: 70px;
+	vertical-align: top;
+	margin: 0; padding: 10px;
+	margin-bottom: 1px;
+	box-sizing: border-box;
+	background-color: transparent;
+	margin-bottom: 5px;
+	margin-top: 5px;
+	box-shadow: 0px 1px 2px 1px #ccc inset;
+	transition: all 0.3s;
+	cursor: pointer;
+}
+
+.var_selector > li.selected {
+	box-shadow: 0px 1px 2px 1px #ccc;
+	background-color: white;
+
 }
 
 #grid_container {
 	position: absolute;
-	display: table;
-	width: 100%;
-	height: 100%;
+	box-sizing: border-box;
 }
 
-#grid_container table {
+#grid_container > .box-container {
+	position: absolute;
+	display: block;
+	box-sizing: border-box;
+	padding: 10px;
+}
+
+#grid_container > .box-container > *:last-child {
 	width: 100%;
 	height: 100%;
-	margin: 0; padding: 0;
+	box-sizing: border-box;
+	background-color: #fff;
+	padding: 5px;
+	box-shadow: 0px 1px 4px 1px #ccc;
 }
 
 svg * {
@@ -62,11 +125,8 @@ svg * {
 	transition: stroke linear 0.1s;
 }
 
-#histogram {
-	position: relative;
-	box-sizing: border-box;
-	display: flex;
-	padding-left: 80px;
+#histogram > table {
+	width: 100%; height: 100%;
 }
 
 #histogram .histogram_canvas {
@@ -100,18 +160,29 @@ svg * {
 	z-index: 3;
 }
 
-#area_label, #variable_label {
-	font-size: 16px;
-}
-
-#variable_label .chosen-container {
-	width: 300px !important;
-	font-size: 16px !important;
-}
-
 </style>
+<div id="header" style="height: 30px;">
+<h1>Helsinki alueittain: <span id="area_label"></span>, <span id="variable_label"></span></h1>
+</div>
 
-<!-- Todo: get rid of this table mess -->
+<div id="sidebar" style="margin: 0; padding: 0; position: absolute; width: 180px; top: 0; right: 0; height: 100%;">
+</div>
+<div id="grid_container" style="left: 0; right: 180px; bottom: 0; top: 30px;">
+
+<div id="map_container"  class="box-container" style="width: 50%; height: 100%;">
+<div id="map"></div>
+</div>
+
+<div id="histogram_container" class="box-container" style="width: 50%; height: 50%; top: 0; left: 50%;">
+<div id="histogram"></div>
+</div>
+
+<div id="timeseries_container" class="box-container" style="width: 50%; height: 50%; top: 50%; left: 50%">
+<svg id="timeseries"></svg>
+</div>
+
+
+<!--
 <table id="grid_container">
 <tr height="0%"><td><h3 style="margin: 0; display: inline;"><span id="variable_label"></span> <span id="area_label"></span></h3></td></tr>
 <tr>
@@ -128,7 +199,7 @@ svg * {
 </td>
 
 </tr></table>
-
+-->
 
 <script type="text/coffeescript">
 
@@ -239,13 +310,18 @@ class AluesarjatFunctionIndicator extends AluesarjatIndicator
 
 			return datasets: datasets
 
+valid_share = (nom, denom) =>
+	if denom < 1
+		return NaN
+	return nom/denom
 
 
 class AluesarjatSimpleShareIndicator extends AluesarjatFunctionIndicator
 	@all_id: 'all'
 	@formatter: d3.format(".3p")
 
-	@get_func: -> (obj) => obj[@subset_id]/obj[@all_id]
+	@get_func: -> (obj) =>
+		valid_share obj[@subset_id], obj[@all_id]
 
 	@get_base_url: ->
 		return "#{@dataset_url}filter&#{@field_id}=#{@all_id},#{@subset_id}/"
@@ -264,8 +340,21 @@ ind class extends AluesarjatFunctionIndicator
 		subset = 0
 		for age in @ages
 			subset += obj[age]
-		return subset/obj['99V']
+		return valid_share subset, obj['99V']
 
+ind class extends AluesarjatFunctionIndicator
+	@title: "Alle kouluikäisten (0-6v) osuus"
+	@formatter: d3.format(".3p")
+	@field_id: "ika"
+	@ages: ("#{d3.format("02d")(i)}V" for i in [0..6])
+	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
+	@func: (obj) =>
+		subset = 0
+		for age in @ages
+			subset += obj[age]
+		return valid_share subset, obj['99V']
+
+###
 ind class extends AluesarjatFunctionIndicator
 	@title: "Kouluikäisiä"
 	
@@ -274,7 +363,7 @@ ind class extends AluesarjatFunctionIndicator
 			return [@get_reference_area()]
 		return areas
 	
-	@formatter: (v) -> "#{v} kpl"
+	@formatter: d3.format('d')
 	@field_id: "ika"
 	@ages: ("#{d3.format("02d")(i)}V" for i in [7..16])
 	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
@@ -283,6 +372,7 @@ ind class extends AluesarjatFunctionIndicator
 		for age in @ages
 			subset += obj[age]
 		return subset
+###
 
 ind class extends AluesarjatFunctionIndicator
 	@title: "Yli 65-vuotiaiden osuus"
@@ -294,8 +384,9 @@ ind class extends AluesarjatFunctionIndicator
 		subset = 0
 		for age in @ages
 			subset += obj[age]
-		return subset/obj['99V']
+		return valid_share subset, obj['99V']
 
+###
 ind class extends AluesarjatFunctionIndicator
 	@title: "Yli 65-vuotiaita"
 	
@@ -304,7 +395,7 @@ ind class extends AluesarjatFunctionIndicator
 			return [@get_reference_area()]
 		return areas
 	
-	@formatter: (v) -> "#{v} kpl"
+	@formatter: d3.format('d')
 	@field_id: "ika"
 	@ages: ("#{d3.format("02d")(i)}V" for i in [65..95] by 5)
 	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
@@ -313,6 +404,7 @@ ind class extends AluesarjatFunctionIndicator
 		for age in @ages
 			subset += obj[age]
 		return subset
+###
 
 ind class extends AluesarjatFunctionIndicator
 	@title: "Asukkaita yhteensä"
@@ -322,7 +414,7 @@ ind class extends AluesarjatFunctionIndicator
 			return [@get_reference_area()]
 		return areas
 	
-	@formatter: (v) -> "#{v} kpl"
+	@formatter: d3.format('d')
 	@field_id: "ika"
 	@dataset_url: "http://dev.hel.fi/stats/resources/aluesarjat_a01hkis_vaestoennuste/"
 	@func: (obj) => obj['99V']
@@ -387,7 +479,6 @@ request_options =
 polygons_promise = $.ajax wfs_url, request_options
 
 start_controller = (polygons) ->
-	console.log polygons
 	ctrl = new _Controller(polygons)
 	ctrl.set_dataset available_indicators[0]
 	.then =>
@@ -407,16 +498,18 @@ autoscale_fix = (axis) ->
 
 class _Controller
 	constructor: (polygons) ->
-		dataset = available_indicators[0]
 		# Hack!
-		dropdown = $("<select>").appendTo $("#variable_label")
+		dropdown = $("<ul class='var_selector'>").appendTo $("#sidebar")
 		for ind, i in available_indicators
 			dropdown.append $ """
-			<option value="#{i}">#{ind.title}</option>
+			<li data-value="#{i}">#{ind.title}</option>
 			"""
-		dropdown.chosen()
-		dropdown.change =>
-			@set_dataset available_indicators[dropdown.val()]
+
+		dropdown.on "click", "li", (e) =>
+			dataset = available_indicators[$(e.target).data("value")]
+			@set_dataset dataset
+
+		@variable_dropdown = dropdown
 		
 		@area_selection = []
 
@@ -455,7 +548,7 @@ class _Controller
 		chart.setMargins 80, 0, 20, 40
 		# Uglyuglyugly, see
 		# https://github.com/PMSI-AlignAlytics/dimple/issues/99
-		chart.y_axis._getFormat = => @dataset.formatter
+		#chart.y_axis._getFormat = => @dataset.formatter
 		chart.x_axis._getFormat = => (x) -> x
 		chart.addSeries(["Vuosi", "Alue"], dimple.plot.line)
 		chart.addLegend("0%", "10px", "100%", null, "right")
@@ -509,9 +602,17 @@ class _Controller
 		@histogram.el.on "mouseout", ".bin", ->
 			hide_tooltip()
 		
+
+		@set_dataset(available_indicators[0])
+		
 		
 	
 	set_dataset: (@dataset) =>
+		@variable_dropdown.find('li').removeClass('selected')
+		# OMG! Use some kind of id!
+		i = available_indicators.indexOf(@dataset)
+		$(@variable_dropdown.find('li')[i]).addClass('selected')
+		$("#variable_label").text(dataset.title)
 		@dataset.New().then @_new_stats
 
 	_new_stats: (@stats) =>
@@ -537,18 +638,19 @@ class _Controller
 		@_update_timeseries()
 
 	_update_area_stats: =>
+		$("#map_container, #histogram_container").spin()
 		p = @stats.get_year_data()
 		p.then (data) =>
 			@statsmap.set_data data.data, @dataset.formatter
 			[areas, values] = _.zip data.data...
 			@histogram.set_data values, areas
+			$("#map_container, #histogram_container").spin(false)
 			
 	
 	_update_timeseries: =>
 		@$timeseries_el.spin()
 		areas = @stats.get_timeseries_areas(@area_selection)
-
-		$("#area_label").text @stats.get_area_label areas[areas.length-1]
+		$("#area_label").text @stats.get_area_label areas[0]
 		p = @stats.get_timeseries_data areas
 
 		is_invalid = (x) -> not x? or isNaN x
